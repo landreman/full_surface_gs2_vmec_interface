@@ -23,8 +23,8 @@ program test_vmec_to_gs2_geometry_interface
   
   real :: normalized_toroidal_flux_used, safety_factor_q, shat
   real, dimension(nalpha) :: alpha
-  real, dimension(nzgrid*2+1) :: zeta
-  real, dimension(nalpha, nzgrid*2+1) :: bmag, gradpar, gds2, gds21, gds22, gbdrift, gbdrift0, cvdrift, cvdrift0
+  real, dimension(-nzgrid:nzgrid) :: zeta
+  real, dimension(nalpha, -nzgrid:nzgrid) :: bmag, gradpar, gds2, gds21, gds22, gbdrift, gbdrift0, cvdrift, cvdrift0
   ! This code uses normalizations in which kxfac is always 1, so kxfac is not presently returned.
 
   !*********************************************************************

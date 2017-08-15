@@ -1,7 +1,7 @@
 ! vmec_to_gs2_geometry_interface.f90
 ! Written by Matt Landreman, University of Maryland
 ! Initial code written August 2017.
-! Skip down ~20 lines for detailed description of the input and output parameters.
+! Skip down ~25 lines for detailed description of the input and output parameters.
 
 module vmec_to_gs2_geometry_interface_mod
 
@@ -11,7 +11,9 @@ module vmec_to_gs2_geometry_interface_mod
 
   public :: vmec_to_gs2_geometry_interface
 
-  real :: theta_rootSolve_target, zeta
+  real :: theta_pest_target, zeta0
+  real, dimension(2) :: vmec_radial_weight_full, vmec_radial_weight_half
+  integer, dimension(2) :: vmec_radial_index_full, vmec_radial_index_half
 
 contains
 
@@ -20,7 +22,6 @@ contains
        normalized_toroidal_flux_used, safety_factor_q, shat, &
        alpha, zeta, bmag, gradpar, gds2, gds21, gds22, gbdrift, gbdrift0, cvdrift, cvdrift0)
 
-!    use read_wout_mod, only: read_wout_file, nfp, lasym, xm, xn, xm_nyq, xn_nyq, ns, phi
     use read_wout_mod, nzgrid_vmec => nzgrid  ! VMEC has a variable nzgrid which conflicts with our nzgrid, so rename vmec's version.
 
     implicit none
@@ -45,12 +46,12 @@ contains
 
     ! If number_of_field_periods_to_include is >= 1, then this parameter does what you think:
     ! the extent of the toroidal in zeta will be 2*pi*number_of_field_periods_to_include/nfp.
-    ! If number_of_field_periods_to_include is <1, the entire 2*pi toroidal domain will be included.
+    ! If number_of_field_periods_to_include is < 1, the entire 2*pi toroidal domain will be included.
     ! If number_of_field_periods_to_include is > nfp, an error will result.
     integer, intent(in) :: number_of_field_periods_to_include
 
     ! The parameter desired_normalized_toroidal_flux determines which flux surface from the VMEC file will be used
-    ! for the computation. This parameter should lie in the interval [0,1]
+    ! for the computation. This parameter should lie in the interval [0,1].
     real, intent(in) :: desired_normalized_toroidal_flux
 
     ! If vmec_surface_option = 0, the magnetic surface specified by desired_normalized_toroidal_flux will be used,
@@ -82,9 +83,9 @@ contains
     real, dimension(nalpha), intent(out) :: alpha
 
     ! On exit, zeta holds the grid points in the toroidal angle zeta
-    real, dimension(nzgrid*2+1), intent(out) :: zeta
+    real, dimension(-nzgrid:nzgrid), intent(out) :: zeta
 
-    real, dimension(nalpha, nzgrid*2+1), intent(out) :: bmag, gradpar, gds2, gds21, gds22, gbdrift, gbdrift0, cvdrift, cvdrift0
+    real, dimension(nalpha, -nzgrid:nzgrid), intent(out) :: bmag, gradpar, gds2, gds21, gds22, gbdrift, gbdrift0, cvdrift, cvdrift0
     
     !*********************************************************************
     ! Variables used internally by this subroutine
@@ -100,15 +101,17 @@ contains
 !!$    real(dp) :: rootSolve_abserr, rootSolve_relerr, theta_rootSolve_min, theta_rootSolve_max, theta_rootSolve_soln
 !!$    integer :: fzeroFlag, mpol, ntor, jm, jn, index
 
-    integer :: j, index
-    real, dimension(:,:), allocatable :: alpha_2D, zeta_2D
-    integer :: ierr, iopen
-    real :: dphi, iota, min_dr2, ds, d_pressure_d_s
-    real, dimension(2) :: vmec_radial_weight_full, vmec_radial_weight_half
-    integer, dimension(2) :: vmec_radial_index_full, vmec_radial_index_half
+    integer :: j, index, izeta, ialpha, which_surface, isurf, m, n
+    real :: angle, sin_angle, cos_angle, temp
+    real, dimension(:,:), allocatable :: theta_vmec
+    integer :: ierr, iopen, fzero_flag, number_of_field_periods_to_include_final
+    real :: dphi, iota, min_dr2, ds, d_pressure_d_s, scale_factor
+    real :: theta_vmec_min, theta_vmec_max
     real, dimension(:), allocatable :: dr2, normalized_toroidal_flux_full_grid, normalized_toroidal_flux_half_grid
     real, dimension(:), allocatable :: d_pressure_d_s_on_half_grid
-    
+    real :: rootSolve_abserr, rootSolve_relerr
+    logical :: non_Nyquist_mode_available, found_imn
+
     real, parameter :: pi = 3.1415926535897932d+0
     real, parameter :: zero = 0.0d+0
     real, parameter :: one = 1.0d+0
@@ -402,81 +405,405 @@ contains
     !*********************************************************************
 
     alpha = [( ((j-1)*2*pi) / nalpha, j=1, nalpha )]
+
     if (number_of_field_periods_to_include > nfp) then
        print *,"Error! number_of_field_periods_to_include > nfp"
        print *,"  number_of_field_periods_to_include =",number_of_field_periods_to_include
        print *,"  nfp =",nfp
        stop
     end if
+    number_of_field_periods_to_include_final = number_of_field_periods_to_include
+    if (number_of_field_periods_to_include <1) then
+       number_of_field_periods_to_include_final = nfp
+       if (verbose) print *,"  Since number_of_field_periods_to_include was < 1, it is being reset to nfp =",nfp
+    end if
 
+    zeta = [( zeta_center + (pi*j*number_of_field_periods_to_include_final)/(nfp*nzgrid), j=-nzgrid, nzgrid )]
+
+    !*********************************************************************
+    ! We know theta_pest = alpha + iota * zeta, but we need to determine
+    ! theta_vmec = theta_pest - Lambda.
+    !*********************************************************************
+
+    allocate(theta_vmec(nalpha, -nzgrid:nzgrid))
+
+    if (verbose) print *,"  Beginning root solves to determine theta_vmec."
+    rootSolve_abserr = 1.0d-10
+    rootSolve_relerr = 1.0d-10
+    !open(unit=5,file="testStraightFieldLines",status='new',form='formatted')
+    !write (5,*) ntheta_coordTransform, nzeta_coordTransform
+    do izeta = -nzgrid, nzgrid
+       zeta0 = zeta(izeta)
+       do ialpha = 1,nalpha
+          theta_pest_target = alpha(ialpha) + iota * zeta0
+          ! Guess that theta_vmec will be within 0.3 radians of theta_pest:
+          theta_vmec_min = theta_pest_target - 0.3
+          theta_vmec_max = theta_pest_target + 0.3
+          
+          ! In the 4th argument, we are telling the root-finder (fzero) to use theta_pest as the initial guess for theta_vmec.
+          call fzero(fzero_residual, theta_vmec_min, theta_vmec_max, theta_pest_target, &
+               rootSolve_relerr, rootSolve_abserr, fzero_flag)
+          ! Note: fzero returns its answer in theta_vmec_min
+          theta_vmec(ialpha,izeta) = theta_vmec_min
+          if (fzero_flag == 4) then
+             stop "ERROR: fzero returned error 4: no sign change in residual"
+          else if (fzero_flag > 2) then
+             print *,"WARNING: fzero returned an error code:",fzero_flag
+          end if
+       end do
+    end do
+    if (verbose) then
+       print *,"  Done with root solves. Here comes theta_vmec:"
+       do j = 1, nalpha
+          print *,theta_vmec(j,:)
+       end do
+    end if
        
-!!$       ! Average R and Z from the outermost 2 grid points in vmec's full mesh
-!!$       ! to get R and Z on the outermost point of vmec's half mesh:
-!!$       weight1 = 0.5_dp
-!!$       weight2 = 0.5_dp
-!!$       allocate(rmnc_vmecLast(mnmax_vmec),stat=iflag)
-!!$       if (iflag .ne. 0) stop 'Allocation error!'
-!!$       allocate(zmns_vmecLast(mnmax_vmec),stat=iflag)
-!!$       if (iflag .ne. 0) stop 'Allocation error!'
-!!$       rmnc_vmecLast = rmnc_vmec(:,ns-1) * weight1 + rmnc_vmec(:,ns) * weight2
-!!$       zmns_vmecLast = zmns_vmec(:,ns-1) * weight1 + zmns_vmec(:,ns) * weight2
-!!$       
-!!$       ! Since the "original" vmec poloidal angle is chosen to have a very condensed
-!!$       ! Fourier spectrum, we probably need more Fourier modes to represent the surface using the
-!!$       ! straight-field-line coordinate.
-!!$       mpol = mpol_vmec*mpol_transform_refinement
-!!$       ntor = ntor_vmec*ntor_transform_refinement
-!!$       
-!!$       ! Beginning of coordinate transformation.
-!!$       ! Set up high-resolution grid in the "new" theta coordinate:
-!!$       ntheta_coordTransform = mpol * 2 
-!!$       nzeta_coordTransform = ntor * 2
-!!$       allocate(r_coordTransform(ntheta_coordTransform, nzeta_coordTransform), stat=iflag)
-!!$       if (iflag .ne. 0) stop 'Allocation error!'
-!!$       allocate(z_coordTransform(ntheta_coordTransform, nzeta_coordTransform), stat=iflag)
-!!$       if (iflag .ne. 0) stop 'Allocation error!'
-!!$       r_coordTransform = 0
-!!$       z_coordTransform = 0
-!!$       
-!!$       call system_clock(tic1)
-!!$       rootSolve_abserr = 1.0e-10_dp
-!!$       rootSolve_relerr = 1.0e-10_dp
-!!$       !open(unit=5,file="testStraightFieldLines",status='new',form='formatted')
-!!$       !write (5,*) ntheta_coordTransform, nzeta_coordTransform
-!!$       do izeta = 1,nzeta_coordTransform
-!!$          zeta = (izeta-1.0_dp)/nzeta_coordTransform
-!!$          do itheta = 1,ntheta_coordTransform
-!!$             ! For each value of the new coordinates, solve for the old theta:
-!!$             theta_rootSolve_target = (itheta-1.0_dp)/ntheta_coordTransform
-!!$             theta_rootSolve_min = theta_rootSolve_target - 0.3
-!!$             theta_rootSolve_max = theta_rootSolve_target + 0.3
-!!$             
-!!$             call fzero(fzero_residual, theta_rootSolve_min, theta_rootSolve_max, theta_rootSolve_target, &
-!!$                  rootSolve_relerr, rootSolve_abserr, fzeroFlag)
-!!$             ! Note: fzero returns its answer in theta_rootSolve_min
-!!$             theta_rootSolve_soln = theta_rootSolve_min
-!!$             if (fzeroFlag == 4) then
-!!$                stop "ERROR: fzero returned error 4: no sign change in residual"
-!!$             else if (fzeroFlag > 2) then
-!!$                print *,"WARNING: fzero returned an error code:",fzeroFlag
-!!$             end if
-!!$             ! Now that we have the old theta, evaluate r and z:
-!!$             r_temp = 0
-!!$             z_temp = 0
-!!$             do imn = 1, mnmax_vmec
-!!$                !angle = twopi*(xm_vmec(imn)*theta_rootSolve_soln - xn_vmec(imn)*zeta/nfp)
-!!$                angle = xm_vmec(imn)*theta_rootSolve_soln - xn_vmec(imn)*zeta
-!!$                r_temp = r_temp + rmnc_vmecLast(imn)*cos(angle)
-!!$                z_temp = z_temp + zmns_vmecLast(imn)*sin(angle)
-!!$             end do
-!!$             r_coordTransform(itheta,izeta) = r_temp
-!!$             z_coordTransform(itheta,izeta) = z_temp
-!!$             !write(5,*) theta_rootSolve_soln
-!!$          end do
-!!$       end do
-!!$       !close(unit=5)
-!!$       call system_clock(toc1)
-!!$       print *,"  Time for root solving:",real(toc1-tic1)/countrate
+    !*********************************************************************
+    ! Now that we know the grid points in theta_vmec, we can evaluate
+    ! all the geometric quantities on the grid points.
+    !*********************************************************************
+
+    do imn_nyq = 1, mnmax_nyq ! All the quantities we need except R and Z use the _nyq mode numbers.
+       m = xm_nyq(imn_nyq)
+       n = xn_nyq(imn_nyq)/nfp
+
+       if (abs(m) >= mpol .or. abs(n) > ntor) then
+          non_Nyquist_mode_available = .false.
+       else
+          non_Nyquist_mode_available = .true.
+          ! Find the imn in the non-Nyquist arrays that corresponds to the same m and n.
+          found_imn = .false.
+          do imn = 1,mnmax
+             if (xm(imn)==m .and. xn(imn)==n*nfp) then
+                found_imn = .true.
+                exit
+             end if
+          end do
+          if ((xm(imn) .ne. m) .or. (xn(imn) .ne. n*nfp)) stop "Something went wrong!"
+          if (.not. found_imn) stop "Error! imn could not be found matching the given imn_nyq."
+       end if
+
+       ! -----------------------------------------------------
+       ! First, consider just the stellarator-symmetric terms:
+       ! -----------------------------------------------------
+       
+       b = bmnc(imn_nyq,vmecRadialIndex_half(1)) * vmecRadialWeight_half(1) &
+            + bmnc(imn_nyq,vmecRadialIndex_half(2)) * vmecRadialWeight_half(2)
+       
+       ! All quantities are multiplied by a variable scale_factor which can in principle depend on m and n.
+       ! For now we just set scale_factor = 1. In the future, scale_factor could be used to lower the
+       ! symmetry-breaking Fourier components, or filter out certain Fourier components in some way.
+       scale_factor = 1
+       b = b*scale_factor
+	
+
+          ! Evaluate the radial derivatives we will need:
+          dpsi = phi(2)/(2*pi)  ! Doesn't need to be in the loops, but here for convenience.
+
+          ! B, B_sub_theta, and B_sub_zeta are on the half mesh, so their radial derivatives are on the full mesh.
+          ! R and Z are on the full mesh, so their radial derivatives are on the half mesh.
+
+          vmec_dBHatdpsiHat(2:ns-1) = (bmnc(imn_nyq,3:ns) - bmnc(imn_nyq,2:ns-1)) / dpsi
+          ! Simplistic "extrapolation" at the endpoints:
+          vmec_dBHatdpsiHat(1) = vmec_dBHatdpsiHat(2)
+          vmec_dBHatdpsiHat(ns) = vmec_dBHatdpsiHat(ns-1)
+
+          vmec_dBHat_sub_theta_dpsiHat(2:ns-1) = (bsubumnc(imn_nyq,3:ns) - bsubumnc(imn_nyq,2:ns-1)) / dpsi
+          vmec_dBHat_sub_theta_dpsiHat(1) = vmec_dBHat_sub_theta_dpsiHat(2)
+          vmec_dBHat_sub_theta_dpsiHat(ns) = vmec_dBHat_sub_theta_dpsiHat(ns-1)
+
+          vmec_dBHat_sub_zeta_dpsiHat(2:ns-1) = (bsubvmnc(imn_nyq,3:ns) - bsubvmnc(imn_nyq,2:ns-1)) / dpsi
+          vmec_dBHat_sub_zeta_dpsiHat(1) = vmec_dBHat_sub_zeta_dpsiHat(2)
+          vmec_dBHat_sub_zeta_dpsiHat(ns) = vmec_dBHat_sub_zeta_dpsiHat(ns-1)
+
+          if (non_Nyquist_mode_available) then
+             vmec_dRdpsiHat(2:ns) = (rmnc(imn,2:ns) - rmnc(imn,1:ns-1)) / dpsi
+             vmec_dRdpsiHat(1) = 0
+
+             vmec_dZdpsiHat(2:ns) = (zmns(imn,2:ns) - zmns(imn,1:ns-1)) / dpsi
+             vmec_dZdpsiHat(1) = 0
+          else
+             vmec_dRdpsiHat = 0
+             vmec_dZdpsiHat = 0
+          end if
+
+          ! End of evaluating radial derivatives.
+             
+          do ialpha = 1,nalpha
+             do izeta = -nzgrid, nzgrid
+                angle = m * theta_vmec(ialpha,izeta) - n * nfp * zeta(izeta)
+                cos_angle = cos(angle)
+                sin_angle = sin(angle)
+                
+                BHat(ialpha,izeta) = BHat(ialpha,izeta) + b * cos_angle
+                
+                dbHatdtheta(ialpha,izeta) = dBHatdtheta(ialpha,izeta) - m * b * sin_angle
+                
+                dbHatdzeta(ialpha,izeta) = dBHatdzeta(ialpha,izeta) + n * nfp * b * sin_angle
+                
+                do isurf = 1,2
+                   ! Handle Jacobian:
+                   temp = gmnc(imn_nyq,vmecRadialIndex_half(isurf)) * vmecRadialWeight_half(isurf)
+                   temp = temp*scale_factor
+                   sqrt_g(ialpha,izeta) = sqrt_g(ialpha,izeta) + temp * cos_angle
+
+                   ! Handle B sup theta:
+                   ! Note that VMEC's bsupumnc and bsupumns are exactly the same as SFINCS's BHat_sup_theta, with no conversion factors of 2pi needed.
+                   temp = bsupumnc(imn_nyq,vmecRadialIndex_half(isurf)) * vmecRadialWeight_half(isurf)
+                   temp = temp*scale_factor
+                   BHat_sup_theta(ialpha,izeta) = BHat_sup_theta(ialpha,izeta) + temp * cos_angle
+                   dBHat_sup_theta_dzeta(ialpha,izeta) = dBHat_sup_theta_dzeta(ialpha,izeta) + n * nfp * temp * sin_angle
+
+                   ! Handle B sup zeta:
+                   ! Note that VMEC's bsupvmnc and bsupvmns are exactly the same as SFINCS's BHat_sup_zeta, with no conversion factors of 2pi or nfp needed.
+                   temp = bsupvmnc(imn_nyq,vmecRadialIndex_half(isurf)) * vmecRadialWeight_half(isurf)
+                   temp = temp*scale_factor
+                   BHat_sup_zeta(ialpha,izeta) = BHat_sup_zeta(ialpha,izeta) + temp * cos_angle
+                   dBHat_sup_zeta_dtheta(ialpha,izeta) = dBHat_sup_zeta_dtheta(ialpha,izeta) - m * temp * sin_angle
+
+                   ! Handle B sub theta:
+                   ! Note that VMEC's bsubumnc and bsubumns are exactly the same as SFINCS's BHat_sub_theta, with no conversion factors of 2pi needed.
+                   temp = bsubumnc(imn_nyq,vmecRadialIndex_half(isurf)) * vmecRadialWeight_half(isurf)
+                   temp = temp*scale_factor
+                   BHat_sub_theta(ialpha,izeta) = BHat_sub_theta(ialpha,izeta) + temp * cos_angle
+                   dBHat_sub_theta_dzeta(ialpha,izeta) = dBHat_sub_theta_dzeta(ialpha,izeta) + n * nfp * temp * sin_angle
+
+                   ! Handle B sub zeta:
+                   ! Note that VMEC's bsubvmnc and bsubvmns are exactly the same as SFINCS's BHat_sub_zeta, with no conversion factors of 2pi needed.
+                   temp = bsubvmnc(imn_nyq,vmecRadialIndex_half(isurf)) * vmecRadialWeight_half(isurf)
+                   temp = temp*scale_factor
+                   BHat_sub_zeta(ialpha,izeta) = BHat_sub_zeta(ialpha,izeta) + temp * cos_angle
+                   dBHat_sub_zeta_dtheta(ialpha,izeta) = dBHat_sub_zeta_dtheta(ialpha,izeta) - m * temp * sin_angle
+
+                   ! Handle B sub psi.
+                   ! Unlike the other components of B, this one is on the full mesh.
+                   ! Notice B_psi = B_s * (d s / d psi), and (d s / d psi) = 1 / psiAHat
+                   temp = bsubsmns(imn_nyq,vmecRadialIndex_full(isurf)) / psiAHat * vmecRadialWeight_full(isurf)
+                   temp = temp*scale_factor
+                   BHat_sub_psi(ialpha,izeta) = BHat_sub_psi(ialpha,izeta) + temp * sin_angle
+                   dBHat_sub_psi_dtheta(ialpha,izeta) = dBHat_sub_psi_dtheta(ialpha,izeta) + m * temp * cos_angle
+                   dBHat_sub_psi_dzeta(ialpha,izeta)  = dBHat_sub_psi_dzeta(ialpha,izeta) - n * nfp * temp * cos_angle
+
+                   ! Handle dBHatdpsiHat.
+                   ! Since bmnc is on the half mesh, its radial derivative is on the full mesh.
+                   temp = vmec_dBHatdpsiHat(vmecRadialIndex_full(isurf)) * vmecRadialWeight_full(isurf)
+                   temp = temp*scale_factor
+                   dBHatdpsiHat(ialpha,izeta) = dBHatdpsiHat(ialpha,izeta) + temp * cos_angle
+
+                   ! Handle dBHat_sub_theta_dpsiHat.
+                   ! Since bsubumnc is on the half mesh, its radial derivative is on the full mesh.
+                   temp = vmec_dBHat_sub_theta_dpsiHat(vmecRadialIndex_full(isurf)) * vmecRadialWeight_full(isurf)
+                   temp = temp*scale_factor
+                   dBHat_sub_theta_dpsiHat(ialpha,izeta) = dBHat_sub_theta_dpsiHat(ialpha,izeta) + temp * cos_angle
+
+                   ! Handle dBHat_sub_zeta_dpsiHat.
+                   ! Since bsubvmnc is on the half mesh, its radial derivative is on the full mesh.
+                   temp = vmec_dBHat_sub_zeta_dpsiHat(vmecRadialIndex_full(isurf)) * vmecRadialWeight_full(isurf)
+                   temp = temp*scale_factor
+                   dBHat_sub_zeta_dpsiHat(ialpha,izeta) = dBHat_sub_zeta_dpsiHat(ialpha,izeta) + temp * cos_angle
+
+                   ! Handle arrays that use xm and xn instead of xm_nyq and xn_nyq.
+                   if (non_Nyquist_mode_available) then
+
+                      ! Handle R, which is on the full mesh
+                      temp = rmnc(imn,vmecRadialIndex_full(isurf)) * vmecRadialWeight_full(isurf)
+                      temp = temp*scale_factor
+                      R(ialpha,izeta) = R(ialpha,izeta) + temp * cos_angle
+                      dRdtheta(ialpha,izeta) = dRdtheta(ialpha,izeta) - temp * m * sin_angle
+                      dRdzeta(ialpha,izeta)  = dRdzeta(ialpha,izeta)  + temp * n * nfp * sin_angle
+
+                      ! Handle Z, which is on the full mesh
+                      temp = zmns(imn,vmecRadialIndex_full(isurf)) * vmecRadialWeight_full(isurf)
+                      temp = temp*scale_factor
+                      !Z(ialpha,izeta) = Z(ialpha,izeta) + temp * sin_angle  ! We don't actually need Z itself, only derivatives of Z.
+                      dZdtheta(ialpha,izeta) = dZdtheta(ialpha,izeta) + temp * m * cos_angle
+                      dZdzeta(ialpha,izeta)  = dZdzeta(ialpha,izeta)  - temp * n * nfp * cos_angle
+
+                      ! Handle dRdpsiHat.
+                      ! Since R is on the full mesh, its radial derivative is on the half mesh.
+                      temp = vmec_dRdpsiHat(vmecRadialIndex_half(isurf)) * vmecRadialWeight_half(isurf)
+                      temp = temp*scale_factor
+                      dRdpsiHat(ialpha,izeta) = dRdpsiHat(ialpha,izeta) + temp * cos_angle
+
+                      ! Handle dZdpsiHat.
+                      ! Since Z is on the full mesh, its radial derivative is on the half mesh.
+                      temp = vmec_dZdpsiHat(vmecRadialIndex_half(isurf)) * vmecRadialWeight_half(isurf)
+                      temp = temp*scale_factor
+                      dZdpsiHat(ialpha,izeta) = dZdpsiHat(ialpha,izeta) + temp * sin_angle
+
+                   end if
+                end do
+             end do
+          end do
+
+       ! -----------------------------------------------------
+       ! Now consider the stellarator-asymmetric terms.
+       ! NOTE: This functionality has not been tested as thoroughly !!!
+       ! -----------------------------------------------------
+
+       if (lasym) then
+
+          b = bmns(imn_nyq,vmecRadialIndex_half(1)) * vmecRadialWeight_half(1) &
+               + bmns(imn_nyq,vmecRadialIndex_half(2)) * vmecRadialWeight_half(2)
+
+          ! Set scale_factor to rippleScale for non-axisymmetric or non-quasisymmetric modes
+          scale_factor = setScaleFactor(n,m)
+          b = b*scale_factor
+          
+             
+             ! Evaluate the radial derivatives we will need:
+             dpsi = phi(2)/(2*pi)  ! Doesn't need to be in the loops, but here for convenience.
+             
+             ! B, B_sub_theta, and B_sub_zeta are on the half mesh, so their radial derivatives are on the full mesh.
+             ! R and Z are on the full mesh, so their radial derivatives are on the half mesh.
+             
+             vmec_dBHatdpsiHat(2:ns-1) = (bmns(imn_nyq,3:ns) - bmns(imn_nyq,2:ns-1)) / dpsi
+             ! Simplistic "extrapolation" at the endpoints:
+             vmec_dBHatdpsiHat(1) = vmec_dBHatdpsiHat(2)
+             vmec_dBHatdpsiHat(ns) = vmec_dBHatdpsiHat(ns-1)
+             
+             vmec_dBHat_sub_theta_dpsiHat(2:ns-1) = (bsubumns(imn_nyq,3:ns) - bsubumns(imn_nyq,2:ns-1)) / dpsi
+             vmec_dBHat_sub_theta_dpsiHat(1) = vmec_dBHat_sub_theta_dpsiHat(2)
+             vmec_dBHat_sub_theta_dpsiHat(ns) = vmec_dBHat_sub_theta_dpsiHat(ns-1)
+             
+             vmec_dBHat_sub_zeta_dpsiHat(2:ns-1) = (bsubvmns(imn_nyq,3:ns) - bsubvmns(imn_nyq,2:ns-1)) / dpsi
+             vmec_dBHat_sub_zeta_dpsiHat(1) = vmec_dBHat_sub_zeta_dpsiHat(2)
+             vmec_dBHat_sub_zeta_dpsiHat(ns) = vmec_dBHat_sub_zeta_dpsiHat(ns-1)
+             
+             if (non_Nyquist_mode_available) then
+                vmec_dRdpsiHat(2:ns) = (rmns(imn,2:ns) - rmns(imn,1:ns-1)) / dpsi
+                vmec_dRdpsiHat(1) = 0
+             
+                vmec_dZdpsiHat(2:ns) = (zmnc(imn,2:ns) - zmnc(imn,1:ns-1)) / dpsi
+                vmec_dZdpsiHat(1) = 0
+             else
+                vmec_dRdpsiHat = 0
+                vmec_dZdpsiHat = 0
+             end if
+             
+             ! End of evaluating radial derivatives.
+             
+             do ialpha = 1,nalpha
+                do izeta = -nzgrid, nzgrid
+                   angle = m * theta_vmec(ialpha,izeta) - n * nfp * zeta(izeta)
+                   cos_angle = cos(angle)
+                   sin_angle = sin(angle)
+                      
+                   BHat(ialpha,izeta) = BHat(ialpha,izeta) + b * sin_angle
+                   dbHatdtheta(ialpha,izeta) = dBHatdtheta(ialpha,izeta) + m * b * cos_angle
+                   dbHatdzeta(ialpha,izeta) = dBHatdzeta(ialpha,izeta) - n * nfp * b * cos_angle
+                   
+                   do isurf = 1,2
+                      ! Handle Jacobian:
+                      temp = gmns(imn_nyq,vmecRadialIndex_half(isurf)) * vmecRadialWeight_half(isurf)
+                      temp = temp*scale_factor
+                      sqrt_g(ialpha,izeta) = sqrt_g(ialpha,izeta) + temp * sin_angle
+                         
+                      ! Handle B sup theta:
+                      ! Note that VMEC's bsupumnc and bsupumns are exactly the same as SFINCS's BHat_sup_theta, with no conversion factors of 2pi needed.
+                      temp = bsupumns(imn_nyq,vmecRadialIndex_half(isurf)) * vmecRadialWeight_half(isurf)
+                      temp = temp*scale_factor	
+                      BHat_sup_theta(ialpha,izeta) = BHat_sup_theta(ialpha,izeta) + temp * sin_angle
+                      dBHat_sup_theta_dzeta(ialpha,izeta) = dBHat_sup_theta_dzeta(ialpha,izeta) - n * nfp * temp * cos_angle
+                      
+                      ! Handle B sup zeta:
+                      ! Note that VMEC's bsupvmnc and bsupvmns are exactly the same as SFINCS's BHat_sup_zeta, with no conversion factors of 2pi or nfp needed.
+                      temp = bsupvmns(imn_nyq,vmecRadialIndex_half(isurf)) * vmecRadialWeight_half(isurf)
+                      temp = temp*scale_factor
+                      BHat_sup_zeta(ialpha,izeta) = BHat_sup_zeta(ialpha,izeta) + temp * sin_angle
+                      dBHat_sup_zeta_dtheta(ialpha,izeta) = dBHat_sup_zeta_dtheta(ialpha,izeta) + m * temp * cos_angle
+                      
+                      ! Handle B sub theta:
+                      ! Note that VMEC's bsubumnc and bsubumns are exactly the same as SFINCS's BHat_sub_theta, with no conversion factors of 2pi needed.
+                      temp = bsubumns(imn_nyq,vmecRadialIndex_half(isurf)) * vmecRadialWeight_half(isurf)
+                      temp = temp*scale_factor
+                      BHat_sub_theta(ialpha,izeta) = BHat_sub_theta(ialpha,izeta) + temp * sin_angle
+                      dBHat_sub_theta_dzeta(ialpha,izeta) = dBHat_sub_theta_dzeta(ialpha,izeta) - n * nfp * temp * cos_angle
+                      
+                      ! Handle B sub zeta:
+                      ! Note that VMEC's bsubvmnc and bsubvmns are exactly the same as SFINCS's BHat_sub_zeta, with no conversion factors of 2pi needed.
+                      temp = bsubvmns(imn_nyq,vmecRadialIndex_half(isurf)) * vmecRadialWeight_half(isurf)
+                      temp = temp*scale_factor
+                      BHat_sub_zeta(ialpha,izeta) = BHat_sub_zeta(ialpha,izeta) + temp * sin_angle
+                      dBHat_sub_zeta_dtheta(ialpha,izeta) = dBHat_sub_zeta_dtheta(ialpha,izeta) + m * temp * cos_angle
+                      
+                      ! Handle B sub psi.
+                      ! Unlike the other components of B, this one is on the full mesh.
+                      ! Notice B_psi = B_s * (d s / d psi), and (d s / d psi) = 1 / psiAHat
+                      temp = bsubsmnc(imn_nyq,vmecRadialIndex_full(isurf)) / psiAHat * vmecRadialWeight_full(isurf)
+                      temp = temp*scale_factor
+                      BHat_sub_psi(ialpha,izeta) = BHat_sub_psi(ialpha,izeta) + temp * cos_angle
+                      dBHat_sub_psi_dtheta(ialpha,izeta) = dBHat_sub_psi_dtheta(ialpha,izeta) - m * temp * sin_angle
+                      dBHat_sub_psi_dzeta(ialpha,izeta)  = dBHat_sub_psi_dzeta(ialpha,izeta) + n * nfp * temp * sin_angle
+                      
+                      ! Handle dBHatdpsiHat.
+                      ! Since bmns is on the half mesh, its radial derivative is on the full mesh.
+                      temp = vmec_dBHatdpsiHat(vmecRadialIndex_full(isurf)) * vmecRadialWeight_full(isurf)
+                      temp = temp*scale_factor
+                      dBHatdpsiHat(ialpha,izeta) = dBHatdpsiHat(ialpha,izeta) + temp * sin_angle
+                      
+                      ! Handle dBHat_sub_theta_dpsiHat.
+                      ! Since bsubumns is on the half mesh, its radial derivative is on the full mesh.
+                      temp = vmec_dBHat_sub_theta_dpsiHat(vmecRadialIndex_full(isurf)) * vmecRadialWeight_full(isurf)
+                      temp = temp*scale_factor
+                      dBHat_sub_theta_dpsiHat(ialpha,izeta) = dBHat_sub_theta_dpsiHat(ialpha,izeta) + temp * sin_angle
+                      
+                      ! Handle dBHat_sub_zeta_dpsiHat.
+                      ! Since bsubvmns is on the half mesh, its radial derivative is on the full mesh.
+                      temp = vmec_dBHat_sub_zeta_dpsiHat(vmecRadialIndex_full(isurf)) * vmecRadialWeight_full(isurf)
+                      temp = temp*scale_factor
+                      dBHat_sub_zeta_dpsiHat(ialpha,izeta) = dBHat_sub_zeta_dpsiHat(ialpha,izeta) + temp * sin_angle
+                      
+                      ! Handle arrays that use xm and xn instead of xm_nyq and xn_nyq.
+                      if (non_Nyquist_mode_available) then
+
+                         ! Handle R, which is on the full mesh
+                         temp = rmns(imn,vmecRadialIndex_full(isurf)) * vmecRadialWeight_full(isurf)
+                         temp = temp*scale_factor
+                         R(ialpha,izeta) = R(ialpha,izeta) + temp * sin_angle
+                         dRdtheta(ialpha,izeta) = dRdtheta(ialpha,izeta) + temp * m * cos_angle
+                         dRdzeta(ialpha,izeta)  = dRdzeta(ialpha,izeta)  - temp * n * nfp * cos_angle
+
+                         ! Handle Z, which is on the full mesh
+                         temp = zmnc(imn,vmecRadialIndex_full(isurf)) * vmecRadialWeight_full(isurf)
+                         temp = temp*scale_factor
+                         ! Z(ialpha,izeta) = Z(ialpha,izeta) + temp * cos_angle   ! We don't actually need Z itself, only derivatives of Z.
+                         dZdtheta(ialpha,izeta) = dZdtheta(ialpha,izeta) - temp * m * sin_angle
+                         dZdzeta(ialpha,izeta)  = dZdzeta(ialpha,izeta)  + temp * n * nfp * sin_angle
+
+                         ! Handle dRdpsiHat.
+                         ! Since R is on the full mesh, its radial derivative is on the half mesh.
+                         temp = vmec_dRdpsiHat(vmecRadialIndex_half(isurf)) * vmecRadialWeight_half(isurf)
+                         temp = temp*scale_factor
+                         dRdpsiHat(ialpha,izeta) = dRdpsiHat(ialpha,izeta) + temp * sin_angle
+                         
+                         ! Handle dZdpsiHat.
+                         ! Since Z is on the full mesh, its radial derivative is on the half mesh.
+                         temp = vmec_dZdpsiHat(vmecRadialIndex_half(isurf)) * vmecRadialWeight_half(isurf)
+                         temp = temp*scale_factor
+                         dZdpsiHat(ialpha,izeta) = dZdpsiHat(ialpha,izeta) + temp * cos_angle
+                      end if
+                   end do
+                end do
+             end do
+          end if
+       end do
+
+    do izeta = 1,Nzeta
+       cos_angle = cos(zeta(izeta))
+       sin_angle = sin(zeta(izeta))
+
+       ! X = R * cos(zeta)
+       dXdtheta(:,izeta) = dRdtheta(:,izeta) * cos_angle
+       dXdzeta(:,izeta) = dRdzeta(:,izeta) * cos_angle - R(:,izeta) * sin_angle
+       dXdpsiHat(:,izeta) = dRdpsiHat(:,izeta) * cos_angle
+
+       ! Y = R * sin(zeta)
+       dYdtheta(:,izeta) = dRdtheta(:,izeta) * sin_angle
+       dYdzeta(:,izeta) = dRdzeta(:,izeta) * sin_angle + R(:,izeta) * cos_angle
+       dYdpsiHat(:,izeta) = dRdpsiHat(:,izeta) * sin_angle
+    end do
 
     if (verbose) print *,"Leaving vmec_to_gs2_geometry_interface."
 
@@ -484,20 +811,31 @@ contains
 
   ! --------------------------------------------------------------------------
 
-  function fzero_residual(theta_old)
+  function fzero_residual(theta_vmec_try)
 
-    use read_wout_mod, only: xm_vmec => xm, xn_vmec => xn, mnmax_vmec => mnmax, lmns, ns
-    
+    use read_wout_mod, only: xm, xn, mnmax, lmns, lmnc, lasym
+    ! Note that lmns and lmnc use the non-Nyquist xm, xn, and mnmax.
+    ! Also note that lmns and lmnc are on the HALF grid.
+
     implicit none
     
-    real :: theta_old, fzero_residual
-    integer :: imn
+    real :: theta_vmec_try, fzero_residual
+    real :: angle, sinangle, cosangle
+    integer :: imn, which_surface
 
-    ! residual = twopi*(u_new - u_new_target) = (twopi*u_old + lambda) - u_new_target*twopi
-    fzero_residual = theta_old - theta_rootSolve_target
+    ! residual = (theta_pest based on theta_vmec_try) - theta_pest_target = theta_vmec_try + Lambda - theta_pest_target
+    fzero_residual = theta_vmec_try - theta_pest_target
 
-    do imn = 1, mnmax_vmec
-       fzero_residual = fzero_residual + lmns(imn,ns)*sin(xm_vmec(imn)*theta_old - xn_vmec(imn)*zeta)
+    do imn = 1, mnmax
+       angle = xm(imn)*theta_vmec_try - xn(imn)*zeta0
+       sinangle = sin(angle)
+       cosangle = cos(angle)
+       do which_surface = 1,2
+          fzero_residual = fzero_residual + vmec_radial_weight_half(which_surface) * lmns(imn,vmec_radial_index_half(which_surface)) * sinangle
+          if (lasym) then
+             fzero_residual = fzero_residual + vmec_radial_weight_half(which_surface) * lmnc(imn,vmec_radial_index_half(which_surface)) * cosangle
+          end if
+       end do
     end do
 
   end function fzero_residual
