@@ -226,7 +226,7 @@ at the $(\theta_v, \zeta)$ grid points, using VMEC's Fourier arrays {\ttfamily b
 For the full-flux-surface calculation, we will take the parallel coordinate $z$ to be the toroidal angle $\zeta$.
 Then to evaluate $\gradpar$, we use
 \begin{equation}
-\gradpar = \frac{\vect{B}\cdot\nabla\zeta}{B} = \frac{B^\zeta}{B},
+\gradpar = L_{ref} \frac{\vect{B}\cdot\nabla\zeta}{B} = L_{ref} \frac{B^\zeta}{B},
 \end{equation}
 %\begin{align}
 %\gradpar
@@ -304,7 +304,7 @@ needed for $\gbdrift$ is straightforward. Alternatively, $\gbdrift$ can be compu
 =
 \frac{1}{\sqrt{g}} &\left[
 B_s \frac{\partial B}{\partial \theta_v} \left(\frac{\partial \Lambda}{\partial\zeta} - \iota \right)
-+ B_\theta \frac{\partial B}{\partial\zeta} \left( \frac{\partial\Lambda}{\partial x} - \zeta \frac{d\iota}{ds}\right)
++ B_\theta \frac{\partial B}{\partial\zeta} \left( \frac{\partial\Lambda}{\partial s} - \zeta \frac{d\iota}{ds}\right)
 + B_\zeta \frac{\partial B}{\partial s} \left( 1 + \frac{\partial \Lambda}{\partial \theta_v}\right) \right. \nonumber \\
 &\left.-B_\zeta \frac{\partial B}{\partial\theta_v} \left( \frac{\partial\Lambda}{\partial s} - \zeta \frac{d\iota}{ds}\right)
 -B_\theta \frac{\partial B}{\partial\zeta} \left( \frac{\partial \Lambda}{\partial\zeta}-\iota\right)
