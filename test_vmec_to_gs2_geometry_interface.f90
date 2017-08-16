@@ -21,7 +21,7 @@ program test_vmec_to_gs2_geometry_interface
   ! Output arrays
   !*********************************************************************
   
-  real :: normalized_toroidal_flux_used, safety_factor_q, shat
+  real :: normalized_toroidal_flux_used, safety_factor_q, shat, L_reference, B_reference
   real, dimension(nalpha) :: alpha
   real, dimension(-nzgrid:nzgrid) :: zeta
   real, dimension(nalpha, -nzgrid:nzgrid) :: bmag, gradpar, gds2, gds21, gds22, gbdrift, gbdrift0, cvdrift, cvdrift0
@@ -39,7 +39,7 @@ program test_vmec_to_gs2_geometry_interface
 
   call vmec_to_gs2_geometry_interface(vmec_filename, nalpha, nzgrid, zeta_center, number_of_field_periods_to_include, &
        desired_normalized_toroidal_flux, vmec_surface_option, verbose, &
-       normalized_toroidal_flux_used, safety_factor_q, shat, &
+       normalized_toroidal_flux_used, safety_factor_q, shat, L_reference, B_reference, &
        alpha, zeta, bmag, gradpar, gds2, gds21, gds22, gbdrift, gbdrift0, cvdrift, cvdrift0)
 
   print *,"-------------- Input parameters ------------------"
@@ -55,6 +55,8 @@ program test_vmec_to_gs2_geometry_interface
   print *,"normalized_toroidal_flux_used:",normalized_toroidal_flux_used
   print *,"safety_factor_q:",safety_factor_q
   print *,"shat:",shat
+  print *,"L_reference:",L_reference
+  print *,"B_reference:",B_reference
   print *,"alpha:"
   print *,alpha
   print *,"zeta:"
