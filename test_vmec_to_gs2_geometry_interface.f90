@@ -9,7 +9,7 @@ program test_vmec_to_gs2_geometry_interface
   !*********************************************************************
 
   character(len=2000) :: vmec_filename = 'equilibria/wout_w7x_standardConfig.nc'
-  integer, parameter :: nalpha = 7
+  integer, parameter :: nalpha = 1
   integer, parameter :: nzgrid = 5
   real :: zeta_center = 0.0
   integer :: number_of_field_periods_to_include = 1
@@ -31,7 +31,7 @@ program test_vmec_to_gs2_geometry_interface
   ! Variables used internally by this program
   !*********************************************************************
 
-  integer :: j
+  integer :: j, iunit
 
   !*********************************************************************
   ! Beginning of executable statements
@@ -106,5 +106,61 @@ program test_vmec_to_gs2_geometry_interface
   do j=1,nalpha
      print *,cvdrift0(j,:)
   end do
+
+  iunit = 6
+  open(file='geometry.dat',unit=iunit)
+  write (iunit,*) 'nalpha nzgrid'
+  write (iunit,*) nalpha, nzgrid
+  write (iunit,*) 'alpha'
+  write (iunit,*) alpha
+  write (iunit,*) 'zeta'
+  write (iunit,*) zeta
+
+  write (iunit,*) 'bmag'
+  do j=1,nalpha
+     write (iunit,*) bmag(j,:)
+  end do
+
+  write (iunit,*) 'gradpar'
+  do j=1,nalpha
+     write (iunit,*) gradpar(j,:)
+  end do
+
+  write (iunit,*) 'gds2'
+  do j=1,nalpha
+     write (iunit,*) gds2(j,:)
+  end do
+
+  write (iunit,*) 'gds21'
+  do j=1,nalpha
+     write (iunit,*) gds21(j,:)
+  end do
+
+  write (iunit,*) 'gds22'
+  do j=1,nalpha
+     write (iunit,*) gds22(j,:)
+  end do
+
+  write (iunit,*) 'gbdrift'
+  do j=1,nalpha
+     write (iunit,*) gbdrift(j,:)
+  end do
+
+  write (iunit,*) 'gbdrift0'
+  do j=1,nalpha
+     write (iunit,*) gbdrift0(j,:)
+  end do
+
+  write (iunit,*) 'cvdrift'
+  do j=1,nalpha
+     write (iunit,*) cvdrift(j,:)
+  end do
+
+  write (iunit,*) 'cvdrift0'
+  do j=1,nalpha
+     write (iunit,*) cvdrift0(j,:)
+  end do
+
+  close(iunit)
 
 end program test_vmec_to_gs2_geometry_interface

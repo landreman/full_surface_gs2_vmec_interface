@@ -206,7 +206,7 @@ contains
        end if
     end if
 
-    edge_toroidal_flux_over_2pi = phi(ns) / (2*pi)
+    edge_toroidal_flux_over_2pi = phi(ns) / (2*pi) * isigng ! isigns is called signgs in the wout*.nc file. Why is this signgs here?
 
     ! Set reference length and magnetic field for GS2's normalization, 
     ! using the choices made by Pavlos Xanthopoulos in GIST:
@@ -436,6 +436,7 @@ contains
     allocate(d_iota_d_s_on_half_grid(ns))
     d_iota_d_s_on_half_grid = 0
     ds = normalized_toroidal_flux_full_grid(2) - normalized_toroidal_flux_full_grid(1)
+    if (verbose) print *,"  ds =",ds
     d_iota_d_s_on_half_grid(2:ns) = (iotaf(2:ns) - iotaf(1:ns-1)) / ds
     d_iota_d_s =  &
          d_iota_d_s_on_half_grid(vmec_radial_index_half(1)) * vmec_radial_weight_half(1) &
@@ -1056,13 +1057,13 @@ contains
     ! matches the corresponding term from VMEC.
     !*********************************************************************
 
-    call test_arrays(B_X * d_X_d_s          + B_Y * d_Y_d_s          + B_Z * d_Z_d_s,          B_sub_s,          .false., 1.0e-7, 'B_sub_s')
-    call test_arrays(B_X * d_X_d_zeta       + B_Y * d_Y_d_zeta       + B_Z * d_Z_d_zeta,       B_sub_zeta,       .false., 1.0e-7, 'B_sub_zeta')
-    call test_arrays(B_X * d_X_d_theta_vmec + B_Y * d_Y_d_theta_vmec + B_Z * d_Z_d_theta_vmec, B_sub_theta_vmec, .false., 1.0e-7, 'B_sub_theta_vmec')
+    call test_arrays(B_X * d_X_d_theta_vmec + B_Y * d_Y_d_theta_vmec + B_Z * d_Z_d_theta_vmec, B_sub_theta_vmec, .false., 1.0e-3, 'B_sub_theta_vmec')
+    call test_arrays(B_X * d_X_d_s          + B_Y * d_Y_d_s          + B_Z * d_Z_d_s,          B_sub_s,          .false., 3.0e-3, 'B_sub_s')
+    call test_arrays(B_X * d_X_d_zeta       + B_Y * d_Y_d_zeta       + B_Z * d_Z_d_zeta,       B_sub_zeta,       .false., 1.0e-3, 'B_sub_zeta')
 
-    call test_arrays(B_X *          grad_s_X + B_Y *          grad_s_Y + B_Z *          grad_s_Z,           temp2D,  .true., 1.0e-7, 'B_sup_s')
-    call test_arrays(B_X *       grad_zeta_X + B_Y *       grad_zeta_Y + B_Z *       grad_zeta_Z,       B_sup_zeta, .false., 1.0e-7, 'B_sup_zeta')
-    call test_arrays(B_X * grad_theta_vmec_X + B_Y * grad_theta_vmec_Y + B_Z * grad_theta_vmec_Z, B_sup_theta_vmec, .false., 1.0e-7, 'B_sup_theta_vmec')
+    call test_arrays(B_X *          grad_s_X + B_Y *          grad_s_Y + B_Z *          grad_s_Z,           temp2D,  .true., 1.0e-3, 'B_sup_s')
+    call test_arrays(B_X *       grad_zeta_X + B_Y *       grad_zeta_Y + B_Z *       grad_zeta_Z,       B_sup_zeta, .false., 1.0e-3, 'B_sup_zeta')
+    call test_arrays(B_X * grad_theta_vmec_X + B_Y * grad_theta_vmec_Y + B_Z * grad_theta_vmec_Z, B_sup_theta_vmec, .false., 1.0e-3, 'B_sup_theta_vmec')
 
     !*********************************************************************
     ! For gbdrift, we need \vect{B} cross grad |B| dot grad alpha.
@@ -1072,7 +1073,7 @@ contains
     !*********************************************************************
 
     B_cross_grad_s_dot_grad_alpha = (B_sub_zeta * (1 + d_Lambda_d_theta_vmec) &
-         - B_sub_theta_vmec * d_B_d_zeta * (d_Lambda_d_zeta - iota) ) / sqrt_g
+         - B_sub_theta_vmec * (d_Lambda_d_zeta - iota) ) / sqrt_g
 
     B_cross_grad_s_dot_grad_alpha_alternate = 0 &
          + B_X * grad_s_Y * grad_alpha_Z &
@@ -1083,7 +1084,7 @@ contains
          - B_Y * grad_s_X * grad_alpha_Z 
 
     call test_arrays(B_cross_grad_s_dot_grad_alpha, B_cross_grad_s_dot_grad_alpha_alternate, &
-         .false., 1.0e-7, 'B_cross_grad_s_dot_grad_alpha')
+         .false., 1.0e-3, 'B_cross_grad_s_dot_grad_alpha')
 
     do izeta = -nzgrid,nzgrid
        B_cross_grad_B_dot_grad_alpha(:,izeta) = 0 &
@@ -1091,7 +1092,7 @@ contains
             + B_sub_theta_vmec(:,izeta) * d_B_d_zeta(:,izeta) * (d_Lambda_d_s(:,izeta) - zeta(izeta) * d_iota_d_s) &
             + B_sub_zeta(:,izeta) * d_B_d_s(:,izeta) * (1 + d_Lambda_d_theta_vmec(:,izeta)) &
             - B_sub_zeta(:,izeta) * d_B_d_theta_vmec(:,izeta) * (d_Lambda_d_s(:,izeta) - zeta(izeta) * d_iota_d_s) &
-            - B_sub_theta_vmec(:,izeta) * d_B_d_zeta(:,izeta) * (d_Lambda_d_zeta(:,izeta) - iota) &
+            - B_sub_theta_vmec(:,izeta) * d_B_d_s(:,izeta) * (d_Lambda_d_zeta(:,izeta) - iota) &
             - B_sub_s(:,izeta) * d_B_d_zeta(:,izeta) * (1 + d_Lambda_d_theta_vmec(:,izeta))) / sqrt_g(:,izeta)
     end do
 
@@ -1104,7 +1105,7 @@ contains
          - B_Y * grad_B_X * grad_alpha_Z 
 
     call test_arrays(B_cross_grad_B_dot_grad_alpha, B_cross_grad_B_dot_grad_alpha_alternate, &
-         .false., 1.0e-7, 'B_cross_grad_B_dot_grad_alpha')
+         .false., 1.0e-3, 'B_cross_grad_B_dot_grad_alpha')
 
     !*********************************************************************
     ! Finally, assemble the quantities needed for gs2.
