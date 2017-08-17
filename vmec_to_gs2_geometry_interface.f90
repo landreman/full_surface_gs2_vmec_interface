@@ -99,18 +99,19 @@ contains
     real, parameter :: pi = 3.1415926535897932d+0
     real, parameter :: zero = 0.0d+0
     real, parameter :: one = 1.0d+0
+    real, parameter :: mu_0 = 4*pi*(1.0d-7)
 
     integer :: j, index, izeta, ialpha, which_surface, isurf, m, n, imn, imn_nyq
     real :: angle, sin_angle, cos_angle, temp, edge_toroidal_flux_over_2pi
     real, dimension(:,:), allocatable :: theta_vmec
     integer :: ierr, iopen, fzero_flag, number_of_field_periods_to_include_final
     real :: dphi, iota, min_dr2, ds, d_pressure_d_s, d_iota_d_s, scale_factor
-    real :: theta_vmec_min, theta_vmec_max
+    real :: theta_vmec_min, theta_vmec_max, sqrt_s
     real, dimension(:), allocatable :: dr2, normalized_toroidal_flux_full_grid, normalized_toroidal_flux_half_grid
     real, dimension(:), allocatable :: d_pressure_d_s_on_half_grid, d_iota_d_s_on_half_grid
     real :: root_solve_absolute_tolerance, root_solve_relative_tolerance
     logical :: non_Nyquist_mode_available, found_imn
-    real, dimension(:,:), allocatable :: B, sqrt_g, R, B_dot_grad_theta_pest_over_B_dot_grad_zeta
+    real, dimension(:,:), allocatable :: B, sqrt_g, R, B_dot_grad_theta_pest_over_B_dot_grad_zeta, temp2D
     real, dimension(:,:), allocatable :: d_B_d_theta_vmec, d_B_d_zeta, d_B_d_s
     real, dimension(:,:), allocatable :: d_R_d_theta_vmec, d_R_d_zeta, d_R_d_s
     real, dimension(:,:), allocatable :: d_Z_d_theta_vmec, d_Z_d_zeta, d_Z_d_s
@@ -128,6 +129,10 @@ contains
     real, dimension(:,:), allocatable :: grad_zeta_X, grad_zeta_Y, grad_zeta_Z
     real, dimension(:,:), allocatable :: grad_psi_X, grad_psi_Y, grad_psi_Z
     real, dimension(:,:), allocatable :: grad_alpha_X, grad_alpha_Y, grad_alpha_Z
+    real, dimension(:,:), allocatable :: B_cross_grad_B_dot_grad_alpha, B_cross_grad_B_dot_grad_alpha_alternate
+    real, dimension(:,:), allocatable :: B_cross_grad_s_dot_grad_alpha, B_cross_grad_s_dot_grad_alpha_alternate
+    real, dimension(:,:), allocatable :: grad_B_X, grad_B_Y, grad_B_Z
+    real, dimension(:,:), allocatable :: B_X, B_Y, B_Z
 
 
     !*********************************************************************
@@ -523,6 +528,7 @@ contains
     cvdrift0 = 0
 
     allocate(B(nalpha,-nzgrid:nzgrid))
+    allocate(temp2D(nalpha,-nzgrid:nzgrid))
     allocate(sqrt_g(nalpha,-nzgrid:nzgrid))
     allocate(R(nalpha,-nzgrid:nzgrid))
     allocate(d_B_d_theta_vmec(nalpha,-nzgrid:nzgrid))
@@ -575,6 +581,17 @@ contains
     allocate(grad_alpha_Y(nalpha, -nzgrid:nzgrid))
     allocate(grad_alpha_Z(nalpha, -nzgrid:nzgrid))
     
+    allocate(B_X(nalpha, -nzgrid:nzgrid))
+    allocate(B_Y(nalpha, -nzgrid:nzgrid))
+    allocate(B_Z(nalpha, -nzgrid:nzgrid))
+    allocate(grad_B_X(nalpha, -nzgrid:nzgrid))
+    allocate(grad_B_Y(nalpha, -nzgrid:nzgrid))
+    allocate(grad_B_Z(nalpha, -nzgrid:nzgrid))
+    allocate(B_cross_grad_B_dot_grad_alpha(nalpha, -nzgrid:nzgrid))
+    allocate(B_cross_grad_B_dot_grad_alpha_alternate(nalpha, -nzgrid:nzgrid))
+    allocate(B_cross_grad_s_dot_grad_alpha(nalpha, -nzgrid:nzgrid))
+    allocate(B_cross_grad_s_dot_grad_alpha_alternate(nalpha, -nzgrid:nzgrid))
+
     B = 0
     sqrt_g = 0
     R = 0
@@ -900,8 +917,10 @@ contains
     end do
 
     !*********************************************************************
-    ! Sanity check: We should find that 
-    ! (B dot grad theta_pest) / (B dot grad zeta) = iota
+    ! Sanity check: If the conversion to theta_pest has been done 
+    ! correctly, we should find that 
+    ! (B dot grad theta_pest) / (B dot grad zeta) = iota.
+    ! Let's verify this:
     !*********************************************************************
 
     allocate(B_dot_grad_theta_pest_over_B_dot_grad_zeta(nalpha, -nzgrid:nzgrid))
@@ -934,7 +953,7 @@ contains
 
     !*********************************************************************
     ! Using R(theta,zeta) and Z(theta,zeta), compute the Cartesian
-    ! components of grad psi and grad alpha.
+    ! components of the gradient basis vectors using the dual relations:
     !*********************************************************************
 
     do izeta = -nzgrid, nzgrid
@@ -966,7 +985,52 @@ contains
     grad_zeta_Y = (d_Z_d_s * d_X_d_theta_vmec - d_X_d_s * d_Z_d_theta_vmec) / sqrt_g
     grad_zeta_Z = (d_X_d_s * d_Y_d_theta_vmec - d_Y_d_s * d_X_d_theta_vmec) / sqrt_g
     ! End of the dual relations.
-    ! I could also evaluate grad_zeta_X and grad_zeta_Y as (1/R) times sin or cos?
+
+    ! Sanity check: grad_zeta_X should be -sin(zeta) / R:
+    do izeta = -nzgrid,nzgrid
+       temp2D(:,izeta) = -sin(zeta(izeta)) / R(:,izeta)
+    end do
+    temp = maxval(abs(grad_zeta_X - temp2D)) / maxval(abs(temp2D))
+    if (verbose) print *,"  maxval(abs(grad_zeta_X - (-sin(zeta)/R))): ",temp,"(should be << 1.)"
+    if (temp > (1.0e-3)) then
+       print *,"Error! grad_zeta_X should be -sin(zeta)/R. Here comes grad_zeta_X:"
+       do ialpha = 1,nalpha
+          print *,grad_zeta_X(ialpha,:)
+       end do
+       print *,"Here comes -sin(zeta)/R:"
+       do ialpha = 1,nalpha
+          print *,temp2D(ialpha,:)
+       end do
+       print *,"Here comes the difference:"
+       do ialpha = 1,nalpha
+          print *,grad_zeta_X(ialpha,:) - temp2D(ialpha,:)
+       end do
+       stop
+    end if
+    grad_zeta_X = temp2D
+
+    ! Sanity check: grad_zeta_Y should be cos(zeta) / R:
+    do izeta = -nzgrid,nzgrid
+       temp2D(:,izeta) = cos(zeta(izeta)) / R(:,izeta)
+    end do
+    temp = maxval(abs(grad_zeta_Y - temp2D)) / maxval(abs(temp2D))
+    if (verbose) print *,"  maxval(abs(grad_zeta_Y - (-sin(zeta)/R))): ",temp,"(should be << 1.)"
+    if (temp > (1.0e-3)) then
+       print *,"Error! grad_zeta_Y should be -sin(zeta)/R. Here comes grad_zeta_Y:"
+       do ialpha = 1,nalpha
+          print *,grad_zeta_Y(ialpha,:)
+       end do
+       print *,"Here comes -sin(zeta)/R:"
+       do ialpha = 1,nalpha
+          print *,temp2D(ialpha,:)
+       end do
+       print *,"Here comes the difference:"
+       do ialpha = 1,nalpha
+          print *,grad_zeta_Y(ialpha,:) - temp2D(ialpha,:)
+       end do
+       stop
+    end if
+    grad_zeta_Y = temp2D
 
     ! Sanity check: grad_zeta_Z should be 0:
     temp = maxval(abs(grad_zeta_Z))
@@ -977,6 +1041,10 @@ contains
        stop
     end if
     grad_zeta_Z = 0
+
+    !*********************************************************************
+    ! Compute the Cartesian components of other quantities we need:
+    !*********************************************************************
 
     grad_psi_X = grad_s_X * edge_toroidal_flux_over_2pi
     grad_psi_Y = grad_s_Y * edge_toroidal_flux_over_2pi
@@ -991,6 +1059,101 @@ contains
     grad_alpha_X = grad_alpha_X + (1 + d_Lambda_d_theta_vmec) * grad_theta_vmec_X + (-iota + d_Lambda_d_zeta) * grad_zeta_X
     grad_alpha_Y = grad_alpha_Y + (1 + d_Lambda_d_theta_vmec) * grad_theta_vmec_Y + (-iota + d_Lambda_d_zeta) * grad_zeta_Y
     grad_alpha_Z = grad_alpha_Z + (1 + d_Lambda_d_theta_vmec) * grad_theta_vmec_Z + (-iota + d_Lambda_d_zeta) * grad_zeta_Z
+
+    grad_B_X = d_B_d_s * grad_s_X + d_B_d_theta_vmec * grad_theta_vmec_X + d_B_d_zeta * grad_zeta_X
+    grad_B_Y = d_B_d_s * grad_s_Y + d_B_d_theta_vmec * grad_theta_vmec_Y + d_B_d_zeta * grad_zeta_Y
+    grad_B_Z = d_B_d_s * grad_s_Z + d_B_d_theta_vmec * grad_theta_vmec_Z + d_B_d_zeta * grad_zeta_Z
+
+    !temp2D = edge_toroidal_flux_over_2pi * ((1 + d_Lambda_d_theta_vmec) * d_R_d_zeta + (iota - d_Lambda_d_zeta) * d_R_d_theta_vmec) / sqrt_g
+!!$    do izeta = -nzgrid,nzgrid
+!!$       !B_X(:,izeta) = temp2D(:,izeta) * cos(zeta(izeta))
+!!$       !B_Y(:,izeta) = temp2D(:,izeta) * sin(zeta(izeta))
+!!$       sin_angle = sin(zeta(izeta))
+!!$       cos_angle = cos(zeta(izeta))
+!!$       B_X(:,izeta) = edge_toroidal_flux_over_2pi * ((1 + d_Lambda_d_theta_vmec(:,izeta)) * (d_R_d_zeta(:,izeta)*cos_angle - R(:,izeta)*sin_angle) &
+!!$            + (iota - d_Lambda_d_zeta(:,izeta)) * d_R_d_theta_vmec(:,izeta)*cos_angle) / sqrt_g(:,izeta)
+!!$       B_Y(:,izeta) = edge_toroidal_flux_over_2pi * ((1 + d_Lambda_d_theta_vmec(:,izeta)) * (d_R_d_zeta(:,izeta)*sin_angle + R(:,izeta)*cos_angle) &
+!!$            + (iota - d_Lambda_d_zeta(:,izeta)) * d_R_d_theta_vmec(:,izeta)*sin_angle) / sqrt_g(:,izeta)
+!!$    end do
+    B_X = edge_toroidal_flux_over_2pi * ((1 + d_Lambda_d_theta_vmec) * d_X_d_zeta + (iota - d_Lambda_d_zeta) * d_X_d_theta_vmec) / sqrt_g
+    B_Y = edge_toroidal_flux_over_2pi * ((1 + d_Lambda_d_theta_vmec) * d_Y_d_zeta + (iota - d_Lambda_d_zeta) * d_Y_d_theta_vmec) / sqrt_g
+    B_Z = edge_toroidal_flux_over_2pi * ((1 + d_Lambda_d_theta_vmec) * d_Z_d_zeta + (iota - d_Lambda_d_zeta) * d_Z_d_theta_vmec) / sqrt_g
+
+    sqrt_s = sqrt(normalized_toroidal_flux_used)
+
+    !*********************************************************************
+    ! For gbdrift, we need \vect{B} cross grad |B| dot grad alpha.
+    ! For cvdrift, we also need \vect{B} cross grad s dot grad alpha.
+    ! Let us compute both of these quantities 2 ways, and make sure the two
+    ! approaches give the same answer (within some tolerance).
+    !*********************************************************************
+
+    B_cross_grad_s_dot_grad_alpha = (B_sub_zeta * (1 + d_Lambda_d_theta_vmec) &
+         - B_sub_theta_vmec * d_B_d_zeta * (d_Lambda_d_zeta - iota) ) / sqrt_g
+
+    B_cross_grad_s_dot_grad_alpha_alternate = 0 &
+         + B_X * grad_s_Y * grad_alpha_Z &
+         + B_Y * grad_s_Z * grad_alpha_X &
+         + B_Z * grad_s_X * grad_alpha_Y &
+         - B_Z * grad_s_Y * grad_alpha_X &
+         - B_X * grad_s_Z * grad_alpha_Y &
+         - B_Y * grad_s_X * grad_alpha_Z 
+
+    temp = maxval(abs(B_cross_grad_s_dot_grad_alpha - B_cross_grad_s_dot_grad_alpha_alternate)) &
+         / maxval(abs(B_cross_grad_s_dot_grad_alpha))
+    if (verbose) print *,"  Relative difference between two methods for B cross grad s dot grad alpha: ",temp,"(should be << 1.)"
+    if (temp > (1.0e-7)) then
+       print *,"Error! Two methods for computing B cross grad s dot grad alpha disagree. Here comes method 1:"
+       do ialpha = 1,nalpha
+          print *,B_cross_grad_s_dot_grad_alpha(ialpha,:)
+       end do
+       print *,"Here comes method 2:"
+       do ialpha = 1,nalpha
+          print *,B_cross_grad_s_dot_grad_alpha_alternate(ialpha,:)
+       end do
+       print *,"Here comes the difference:"
+       do ialpha = 1,nalpha
+          print *,B_cross_grad_s_dot_grad_alpha(ialpha,:) - B_cross_grad_s_dot_grad_alpha_alternate(ialpha,:)
+       end do
+       stop
+    end if
+
+    do izeta = -nzgrid,nzgrid
+       B_cross_grad_B_dot_grad_alpha(:,izeta) = 0 &
+            + (B_sub_s(:,izeta) * d_B_d_theta_vmec(:,izeta) * (d_Lambda_d_zeta(:,izeta) - iota) &
+            + B_sub_theta_vmec(:,izeta) * d_B_d_zeta(:,izeta) * (d_Lambda_d_s(:,izeta) - zeta(izeta) * d_iota_d_s) &
+            + B_sub_zeta(:,izeta) * d_B_d_s(:,izeta) * (1 + d_Lambda_d_theta_vmec(:,izeta)) &
+            - B_sub_zeta(:,izeta) * d_B_d_theta_vmec(:,izeta) * (d_Lambda_d_s(:,izeta) - zeta(izeta) * d_iota_d_s) &
+            - B_sub_theta_vmec(:,izeta) * d_B_d_zeta(:,izeta) * (d_Lambda_d_zeta(:,izeta) - iota) &
+            - B_sub_s(:,izeta) * d_B_d_zeta(:,izeta) * (1 + d_Lambda_d_theta_vmec(:,izeta))) / sqrt_g(:,izeta)
+    end do
+
+    B_cross_grad_B_dot_grad_alpha_alternate = 0 &
+         + B_X * grad_B_Y * grad_alpha_Z &
+         + B_Y * grad_B_Z * grad_alpha_X &
+         + B_Z * grad_B_X * grad_alpha_Y &
+         - B_Z * grad_B_Y * grad_alpha_X &
+         - B_X * grad_B_Z * grad_alpha_Y &
+         - B_Y * grad_B_X * grad_alpha_Z 
+
+    temp = maxval(abs(B_cross_grad_B_dot_grad_alpha - B_cross_grad_B_dot_grad_alpha_alternate)) &
+         / maxval(abs(B_cross_grad_B_dot_grad_alpha))
+    if (verbose) print *,"  Relative difference between two methods for B cross grad B dot grad alpha: ",temp,"(should be << 1.)"
+    if (temp > (1.0e-7)) then
+       print *,"Error! Two methods for computing B cross grad B dot grad alpha disagree. Here comes method 1:"
+       do ialpha = 1,nalpha
+          print *,B_cross_grad_B_dot_grad_alpha(ialpha,:)
+       end do
+       print *,"Here comes method 2:"
+       do ialpha = 1,nalpha
+          print *,B_cross_grad_B_dot_grad_alpha_alternate(ialpha,:)
+       end do
+       print *,"Here comes the difference:"
+       do ialpha = 1,nalpha
+          print *,B_cross_grad_B_dot_grad_alpha(ialpha,:) - B_cross_grad_B_dot_grad_alpha_alternate(ialpha,:)
+       end do
+       stop
+    end if
 
     !*********************************************************************
     ! Finally, assemble the quantities needed for gs2.
@@ -1008,12 +1171,18 @@ contains
     gds21 = (grad_alpha_X * grad_psi_X + grad_alpha_Y * grad_psi_Y + grad_alpha_Z * grad_psi_Z) &
          * shat / B_reference
 
-    gds22 = (grad_alpha_X * grad_alpha_X + grad_alpha_Y * grad_alpha_Y + grad_alpha_Z * grad_alpha_Z) &
-         * L_reference * L_reference * normalized_toroidal_flux_used
+    gds22 = (grad_psi_X * grad_psi_X + grad_psi_Y * grad_psi_Y + grad_psi_Z * grad_psi_Z) &
+         * shat * shat / (L_reference * L_reference * B_reference * B_reference * normalized_toroidal_flux_used)
+
+    gbdrift = 2 * B_reference * L_reference * L_reference * sqrt_s * B_cross_grad_B_dot_grad_alpha &
+         / (B * B * B)
 
     gbdrift0 = (B_sub_theta_vmec * d_B_d_zeta - B_sub_zeta * d_B_d_theta_vmec) * sqrt_g * edge_toroidal_flux_over_2pi &
-         * 2 * shat / (B * B * B * sqrt(normalized_toroidal_flux_used))
+         * 2 * shat / (B * B * B * sqrt_s)
     ! In the above 2-line expression for gbdrift0, the first line is \vec{B} \times \nabla B \cdot \nabla \psi.
+
+    cvdrift = gbdrift + 2 * B_reference * L_reference * L_reference * sqrt_s * mu_0 * d_pressure_d_s &
+         * B_cross_grad_s_dot_grad_alpha / (B * B * B * B)
 
     cvdrift0 = gbdrift0
 
@@ -1022,6 +1191,7 @@ contains
     !*********************************************************************
 
     deallocate(B)
+    deallocate(temp2D)
     deallocate(sqrt_g)
     deallocate(R)
     deallocate(d_B_d_theta_vmec)
@@ -1073,6 +1243,17 @@ contains
     deallocate(grad_alpha_X)
     deallocate(grad_alpha_Y)
     deallocate(grad_alpha_Z)
+
+    deallocate(B_X)
+    deallocate(B_Y)
+    deallocate(B_Z)
+    deallocate(grad_B_X)
+    deallocate(grad_B_Y)
+    deallocate(grad_B_Z)
+    deallocate(B_cross_grad_B_dot_grad_alpha)
+    deallocate(B_cross_grad_B_dot_grad_alpha_alternate)
+    deallocate(B_cross_grad_s_dot_grad_alpha)
+    deallocate(B_cross_grad_s_dot_grad_alpha_alternate)
 
     deallocate(normalized_toroidal_flux_full_grid)
     deallocate(normalized_toroidal_flux_half_grid)
