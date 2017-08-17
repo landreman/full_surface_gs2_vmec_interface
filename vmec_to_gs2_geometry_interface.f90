@@ -926,29 +926,8 @@ contains
     allocate(B_dot_grad_theta_pest_over_B_dot_grad_zeta(nalpha, -nzgrid:nzgrid))
     ! Compute (B dot grad theta_pest) / (B dot grad zeta):
     B_dot_grad_theta_pest_over_B_dot_grad_zeta = (B_sup_theta_vmec * (1 + d_Lambda_d_theta_vmec) + B_sup_zeta * d_Lambda_d_zeta) / B_sup_zeta 
-
-    temp = maxval(B_dot_grad_theta_pest_over_B_dot_grad_zeta) / iota
-    if (verbose) print *,"  max(B_dot_grad_theta_pest_over_B_dot_grad_zeta / iota):",temp,"(should be ~ 1.)"
-    if (temp > 1.01) then
-       print *,"Error! B_dot_grad_theta_pest_over_B_dot_grad_zeta / iota is not close to 1."
-       print *,"Here is B_dot_grad_theta_pest_over_B_dot_grad_zeta:"
-       do j = 1,nalpha
-          print *,B_dot_grad_theta_pest_over_B_dot_grad_zeta(j,:)
-       end do
-       stop
-    end if
-
-    temp = minval(B_dot_grad_theta_pest_over_B_dot_grad_zeta) / iota
-    if (verbose) print *,"  min(B_dot_grad_theta_pest_over_B_dot_grad_zeta / iota):",temp,"(should be ~ 1.)"
-    if (temp < 0.99) then
-       print *,"Error! B_dot_grad_theta_pest_over_B_dot_grad_zeta / iota is not close to 1."
-       print *,"Here is B_dot_grad_theta_pest_over_B_dot_grad_zeta:"
-       do j = 1,nalpha
-          print *,B_dot_grad_theta_pest_over_B_dot_grad_zeta(j,:)
-       end do
-       stop
-    end if
-
+    temp2D = iota
+    call test_arrays(B_dot_grad_theta_pest_over_B_dot_grad_zeta, temp2D, .false., 0.01, 'iota')
     deallocate(B_dot_grad_theta_pest_over_B_dot_grad_zeta)
 
     !*********************************************************************
@@ -970,6 +949,11 @@ contains
        d_Y_d_zeta(:,izeta) = d_R_d_zeta(:,izeta) * sin_angle + R(:,izeta) * cos_angle
        d_Y_d_s(:,izeta) = d_R_d_s(:,izeta) * sin_angle
 
+!!$       ! Y = -R * sin(zeta)
+!!$       d_Y_d_theta_vmec(:,izeta) = -d_R_d_theta_vmec(:,izeta) * sin_angle
+!!$       d_Y_d_zeta(:,izeta) = -(d_R_d_zeta(:,izeta) * sin_angle + R(:,izeta) * cos_angle)
+!!$       d_Y_d_s(:,izeta) = -d_R_d_s(:,izeta) * sin_angle
+
     end do
 
     ! Use the dual relations to get the Cartesian components of grad s, grad theta_vmec, and grad zeta:
@@ -990,56 +974,18 @@ contains
     do izeta = -nzgrid,nzgrid
        temp2D(:,izeta) = -sin(zeta(izeta)) / R(:,izeta)
     end do
-    temp = maxval(abs(grad_zeta_X - temp2D)) / maxval(abs(temp2D))
-    if (verbose) print *,"  maxval(abs(grad_zeta_X - (-sin(zeta)/R))): ",temp,"(should be << 1.)"
-    if (temp > (1.0e-3)) then
-       print *,"Error! grad_zeta_X should be -sin(zeta)/R. Here comes grad_zeta_X:"
-       do ialpha = 1,nalpha
-          print *,grad_zeta_X(ialpha,:)
-       end do
-       print *,"Here comes -sin(zeta)/R:"
-       do ialpha = 1,nalpha
-          print *,temp2D(ialpha,:)
-       end do
-       print *,"Here comes the difference:"
-       do ialpha = 1,nalpha
-          print *,grad_zeta_X(ialpha,:) - temp2D(ialpha,:)
-       end do
-       stop
-    end if
-    grad_zeta_X = temp2D
+    call test_arrays(grad_zeta_X, temp2D, .false., 1.0e-3, 'grad_zeta_X')
+    grad_zeta_X = temp2D ! We might as well use the exact value, which is in temp2D.
 
     ! Sanity check: grad_zeta_Y should be cos(zeta) / R:
     do izeta = -nzgrid,nzgrid
        temp2D(:,izeta) = cos(zeta(izeta)) / R(:,izeta)
     end do
-    temp = maxval(abs(grad_zeta_Y - temp2D)) / maxval(abs(temp2D))
-    if (verbose) print *,"  maxval(abs(grad_zeta_Y - (-sin(zeta)/R))): ",temp,"(should be << 1.)"
-    if (temp > (1.0e-3)) then
-       print *,"Error! grad_zeta_Y should be -sin(zeta)/R. Here comes grad_zeta_Y:"
-       do ialpha = 1,nalpha
-          print *,grad_zeta_Y(ialpha,:)
-       end do
-       print *,"Here comes -sin(zeta)/R:"
-       do ialpha = 1,nalpha
-          print *,temp2D(ialpha,:)
-       end do
-       print *,"Here comes the difference:"
-       do ialpha = 1,nalpha
-          print *,grad_zeta_Y(ialpha,:) - temp2D(ialpha,:)
-       end do
-       stop
-    end if
-    grad_zeta_Y = temp2D
+    call test_arrays(grad_zeta_Y, temp2D, .false., 1.0e-3, 'grad_zeta_Y')
+    grad_zeta_Y = temp2D ! We might as well use the exact value, which is in temp2D.
 
-    ! Sanity check: grad_zeta_Z should be 0:
-    temp = maxval(abs(grad_zeta_Z))
-    if (verbose) print *,"  maxval(abs(grad_zeta_Z)): ",temp,"(should be ~ 0.)"
-    if (temp > 1e-14) then
-       print *,"Error! grad_zeta_Z should be ~ 0. Here comes grad_zeta_Z:"
-       print *,grad_zeta_Z
-       stop
-    end if
+    ! grad_zeta_Z should be 0:
+    call test_arrays(grad_zeta_Z, temp2D, .true., 1.0e-14, 'grad_zeta_Z')
     grad_zeta_Z = 0
 
     !*********************************************************************
@@ -1082,6 +1028,43 @@ contains
     sqrt_s = sqrt(normalized_toroidal_flux_used)
 
     !*********************************************************************
+    ! Sanity tests: Verify that the Jacobian equals the appropriate
+    ! cross product of the basis vectors.
+    !*********************************************************************
+
+    temp2D = 0 &
+         + d_X_d_s * d_Y_d_theta_vmec * d_Z_d_zeta &
+         + d_Y_d_s * d_Z_d_theta_vmec * d_X_d_zeta &
+         + d_Z_d_s * d_X_d_theta_vmec * d_Y_d_zeta &
+         - d_Z_d_s * d_Y_d_theta_vmec * d_X_d_zeta &
+         - d_X_d_s * d_Z_d_theta_vmec * d_Y_d_zeta &
+         - d_Y_d_s * d_X_d_theta_vmec * d_Z_d_zeta
+    call test_arrays(sqrt_g, temp2D, .false., 1.0e-4, 'sqrt_g')
+
+    temp2D = 0 &
+         + grad_s_X * grad_theta_vmec_Y * grad_zeta_Z &
+         + grad_s_Y * grad_theta_vmec_Z * grad_zeta_X &
+         + grad_s_Z * grad_theta_vmec_X * grad_zeta_Y &
+         - grad_s_Z * grad_theta_vmec_Y * grad_zeta_X &
+         - grad_s_X * grad_theta_vmec_Z * grad_zeta_Y &
+         - grad_s_Y * grad_theta_vmec_X * grad_zeta_Z
+    call test_arrays(1/sqrt_g, temp2D, .false., 1.0e-4, '1/sqrt_g')
+    
+    !*********************************************************************
+    ! Sanity tests: Verify that 
+    ! \vec{B} dot (each of the covariant and contravariant basis vectors)
+    ! matches the corresponding term from VMEC.
+    !*********************************************************************
+
+    call test_arrays(B_X * d_X_d_s          + B_Y * d_Y_d_s          + B_Z * d_Z_d_s,          B_sub_s,          .false., 1.0e-7, 'B_sub_s')
+    call test_arrays(B_X * d_X_d_zeta       + B_Y * d_Y_d_zeta       + B_Z * d_Z_d_zeta,       B_sub_zeta,       .false., 1.0e-7, 'B_sub_zeta')
+    call test_arrays(B_X * d_X_d_theta_vmec + B_Y * d_Y_d_theta_vmec + B_Z * d_Z_d_theta_vmec, B_sub_theta_vmec, .false., 1.0e-7, 'B_sub_theta_vmec')
+
+    call test_arrays(B_X *          grad_s_X + B_Y *          grad_s_Y + B_Z *          grad_s_Z,           temp2D,  .true., 1.0e-7, 'B_sup_s')
+    call test_arrays(B_X *       grad_zeta_X + B_Y *       grad_zeta_Y + B_Z *       grad_zeta_Z,       B_sup_zeta, .false., 1.0e-7, 'B_sup_zeta')
+    call test_arrays(B_X * grad_theta_vmec_X + B_Y * grad_theta_vmec_Y + B_Z * grad_theta_vmec_Z, B_sup_theta_vmec, .false., 1.0e-7, 'B_sup_theta_vmec')
+
+    !*********************************************************************
     ! For gbdrift, we need \vect{B} cross grad |B| dot grad alpha.
     ! For cvdrift, we also need \vect{B} cross grad s dot grad alpha.
     ! Let us compute both of these quantities 2 ways, and make sure the two
@@ -1099,24 +1082,8 @@ contains
          - B_X * grad_s_Z * grad_alpha_Y &
          - B_Y * grad_s_X * grad_alpha_Z 
 
-    temp = maxval(abs(B_cross_grad_s_dot_grad_alpha - B_cross_grad_s_dot_grad_alpha_alternate)) &
-         / maxval(abs(B_cross_grad_s_dot_grad_alpha))
-    if (verbose) print *,"  Relative difference between two methods for B cross grad s dot grad alpha: ",temp,"(should be << 1.)"
-    if (temp > (1.0e-7)) then
-       print *,"Error! Two methods for computing B cross grad s dot grad alpha disagree. Here comes method 1:"
-       do ialpha = 1,nalpha
-          print *,B_cross_grad_s_dot_grad_alpha(ialpha,:)
-       end do
-       print *,"Here comes method 2:"
-       do ialpha = 1,nalpha
-          print *,B_cross_grad_s_dot_grad_alpha_alternate(ialpha,:)
-       end do
-       print *,"Here comes the difference:"
-       do ialpha = 1,nalpha
-          print *,B_cross_grad_s_dot_grad_alpha(ialpha,:) - B_cross_grad_s_dot_grad_alpha_alternate(ialpha,:)
-       end do
-       stop
-    end if
+    call test_arrays(B_cross_grad_s_dot_grad_alpha, B_cross_grad_s_dot_grad_alpha_alternate, &
+         .false., 1.0e-7, 'B_cross_grad_s_dot_grad_alpha')
 
     do izeta = -nzgrid,nzgrid
        B_cross_grad_B_dot_grad_alpha(:,izeta) = 0 &
@@ -1136,24 +1103,8 @@ contains
          - B_X * grad_B_Z * grad_alpha_Y &
          - B_Y * grad_B_X * grad_alpha_Z 
 
-    temp = maxval(abs(B_cross_grad_B_dot_grad_alpha - B_cross_grad_B_dot_grad_alpha_alternate)) &
-         / maxval(abs(B_cross_grad_B_dot_grad_alpha))
-    if (verbose) print *,"  Relative difference between two methods for B cross grad B dot grad alpha: ",temp,"(should be << 1.)"
-    if (temp > (1.0e-7)) then
-       print *,"Error! Two methods for computing B cross grad B dot grad alpha disagree. Here comes method 1:"
-       do ialpha = 1,nalpha
-          print *,B_cross_grad_B_dot_grad_alpha(ialpha,:)
-       end do
-       print *,"Here comes method 2:"
-       do ialpha = 1,nalpha
-          print *,B_cross_grad_B_dot_grad_alpha_alternate(ialpha,:)
-       end do
-       print *,"Here comes the difference:"
-       do ialpha = 1,nalpha
-          print *,B_cross_grad_B_dot_grad_alpha(ialpha,:) - B_cross_grad_B_dot_grad_alpha_alternate(ialpha,:)
-       end do
-       stop
-    end if
+    call test_arrays(B_cross_grad_B_dot_grad_alpha, B_cross_grad_B_dot_grad_alpha_alternate, &
+         .false., 1.0e-7, 'B_cross_grad_B_dot_grad_alpha')
 
     !*********************************************************************
     ! Finally, assemble the quantities needed for gs2.
@@ -1260,6 +1211,56 @@ contains
     deallocate(theta_vmec)
 
     if (verbose) print *,"Leaving vmec_to_gs2_geometry_interface."
+
+
+  contains
+
+    subroutine test_arrays(array1, array2, should_be_0, tolerance, name)
+      ! This subroutine is used for verifying the geometry arrays.
+      ! When should_be_0 = .true., the subroutine verifies that |array1| = 0 to within 
+      !     an absolute tolerance specified by 'tolerance'. array2 is ignored in this case.
+      ! When should_be_0 = .false., the subroutine verifies that array1 = array2 
+      !     to within a relative tolerance specified by 'tolerance'.
+
+      implicit none
+
+      real, dimension(nalpha,-nzgrid:nzgrid) :: array1, array2
+      real :: tolerance
+      character(len=*) :: name
+      logical :: should_be_0
+      real :: max_value, max_difference
+
+      if (should_be_0) then
+         max_value = maxval(abs(array1))
+         if (verbose) print *,"  maxval(abs(",trim(name),")):",max_value,"(should be << 1.)"
+         if (max_value > tolerance) then
+            print *,"Error! ",trim(name)," should be 0, but instead it is:"
+            do ialpha = 1,nalpha
+               print *,array1(ialpha,:)
+            end do
+            stop
+         end if
+      else
+         max_difference = maxval(abs(array1 - array2)) / maxval(abs(array1) + abs(array2))
+         if (verbose) print *,"  Relative difference between two methods for computing ",trim(name),":",max_difference,"(should be << 1.)"
+         if (max_difference > tolerance) then
+            print *,"Error! Two methods for computing ",trim(name)," disagree. Here comes method 1:"
+            do ialpha = 1,nalpha
+               print *,array1(ialpha,:)
+            end do
+            print *,"Here comes method 2:"
+            do ialpha = 1,nalpha
+               print *,array2(ialpha,:)
+            end do
+            print *,"Here comes the difference:"
+            do ialpha = 1,nalpha
+               print *,array1(ialpha,:) - array2(ialpha,:)
+            end do
+            stop
+         end if
+      end if
+
+    end subroutine test_arrays
 
   end subroutine vmec_to_gs2_geometry_interface
 
