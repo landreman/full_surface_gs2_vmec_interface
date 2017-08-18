@@ -43,14 +43,6 @@ contains
     ! yield identical results to setting zeta_center = 0, where nfp is the number of field periods (as in VMEC).
     real, intent(in) :: zeta_center
 
-    !integer, intent(in) :: domain_size_option
-    ! If domain_size_option = 1, the entire flux surface will be used. zeta will range from
-    !   zeta_center - pi to zeta_center + pi. domain_size_parameter will be ignored.
-    ! If domain_size_option = 2, the range of the domain in zeta will be 2*pi*domain_size_parameter/nfp
-    !   where nfp is the number of field periods (e.g. 5 for W7-X.) So to simulate one of the 5
-    !   identical segments of W7-X, set domain_size_option=2 and domain_size_parameter=1.
-    ! If domain_size_option = 3, the range of the domain in zeta will be 
-
     ! If number_of_field_periods_to_include is > 0, then this parameter does what you think:
     ! the extent of the toroidal in zeta will be 2*pi*number_of_field_periods_to_include/nfp.
     ! If number_of_field_periods_to_include is <= 0, the entire 2*pi toroidal domain will be included.
