@@ -1040,7 +1040,7 @@ contains
          - d_Z_d_s * d_Y_d_theta_vmec * d_X_d_zeta &
          - d_X_d_s * d_Z_d_theta_vmec * d_Y_d_zeta &
          - d_Y_d_s * d_X_d_theta_vmec * d_Z_d_zeta
-    call test_arrays(sqrt_g, temp2D, .false., 1.0e-4, 'sqrt_g')
+    call test_arrays(sqrt_g, temp2D, .false., 1.0e-3, 'sqrt_g')
 
     temp2D = 0 &
          + grad_s_X * grad_theta_vmec_Y * grad_zeta_Z &
@@ -1049,7 +1049,7 @@ contains
          - grad_s_Z * grad_theta_vmec_Y * grad_zeta_X &
          - grad_s_X * grad_theta_vmec_Z * grad_zeta_Y &
          - grad_s_Y * grad_theta_vmec_X * grad_zeta_Z
-    call test_arrays(1/sqrt_g, temp2D, .false., 1.0e-4, '1/sqrt_g')
+    call test_arrays(1/sqrt_g, temp2D, .false., 1.0e-3, '1/sqrt_g')
     
     !*********************************************************************
     ! Sanity tests: Verify that 
@@ -1063,7 +1063,7 @@ contains
 
     call test_arrays(B_X *          grad_s_X + B_Y *          grad_s_Y + B_Z *          grad_s_Z,           temp2D,  .true., 1.0e-3, 'B_sup_s')
     call test_arrays(B_X *       grad_zeta_X + B_Y *       grad_zeta_Y + B_Z *       grad_zeta_Z,       B_sup_zeta, .false., 1.0e-3, 'B_sup_zeta')
-    call test_arrays(B_X * grad_theta_vmec_X + B_Y * grad_theta_vmec_Y + B_Z * grad_theta_vmec_Z, B_sup_theta_vmec, .false., 1.0e-3, 'B_sup_theta_vmec')
+    call test_arrays(B_X * grad_theta_vmec_X + B_Y * grad_theta_vmec_Y + B_Z * grad_theta_vmec_Z, B_sup_theta_vmec, .false., 3.0e-3, 'B_sup_theta_vmec')
 
     !*********************************************************************
     ! For gbdrift, we need \vect{B} cross grad |B| dot grad alpha.
