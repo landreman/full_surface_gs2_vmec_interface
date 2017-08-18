@@ -43,11 +43,18 @@ contains
     ! yield identical results to setting zeta_center = 0, where nfp is the number of field periods (as in VMEC).
     real, intent(in) :: zeta_center
 
-    ! If number_of_field_periods_to_include is >= 1, then this parameter does what you think:
+    !integer, intent(in) :: domain_size_option
+    ! If domain_size_option = 1, the entire flux surface will be used. zeta will range from
+    !   zeta_center - pi to zeta_center + pi. domain_size_parameter will be ignored.
+    ! If domain_size_option = 2, the range of the domain in zeta will be 2*pi*domain_size_parameter/nfp
+    !   where nfp is the number of field periods (e.g. 5 for W7-X.) So to simulate one of the 5
+    !   identical segments of W7-X, set domain_size_option=2 and domain_size_parameter=1.
+    ! If domain_size_option = 3, the range of the domain in zeta will be 
+
+    ! If number_of_field_periods_to_include is > 0, then this parameter does what you think:
     ! the extent of the toroidal in zeta will be 2*pi*number_of_field_periods_to_include/nfp.
-    ! If number_of_field_periods_to_include is < 1, the entire 2*pi toroidal domain will be included.
-    ! If number_of_field_periods_to_include is > nfp, an error will result.
-    integer, intent(in) :: number_of_field_periods_to_include
+    ! If number_of_field_periods_to_include is <= 0, the entire 2*pi toroidal domain will be included.
+    real, intent(in) :: number_of_field_periods_to_include
 
     ! The parameter desired_normalized_toroidal_flux determines which flux surface from the VMEC file will be used
     ! for the computation. This parameter should lie in the interval [0,1].
@@ -104,7 +111,8 @@ contains
     integer :: j, index, izeta, ialpha, which_surface, isurf, m, n, imn, imn_nyq
     real :: angle, sin_angle, cos_angle, temp, edge_toroidal_flux_over_2pi
     real, dimension(:,:), allocatable :: theta_vmec
-    integer :: ierr, iopen, fzero_flag, number_of_field_periods_to_include_final
+    integer :: ierr, iopen, fzero_flag
+    real :: number_of_field_periods_to_include_final
     real :: dphi, iota, min_dr2, ds, d_pressure_d_s, d_iota_d_s, scale_factor
     real :: theta_vmec_min, theta_vmec_max, sqrt_s
     real, dimension(:), allocatable :: dr2, normalized_toroidal_flux_full_grid, normalized_toroidal_flux_half_grid
@@ -463,16 +471,16 @@ contains
 
     alpha = [( ((j-1)*2*pi) / nalpha, j=1, nalpha )]
 
-    if (number_of_field_periods_to_include > nfp) then
-       print *,"Error! number_of_field_periods_to_include > nfp"
-       print *,"  number_of_field_periods_to_include =",number_of_field_periods_to_include
-       print *,"  nfp =",nfp
-       stop
-    end if
+!!$    if (number_of_field_periods_to_include > nfp) then
+!!$       print *,"Error! number_of_field_periods_to_include > nfp"
+!!$       print *,"  number_of_field_periods_to_include =",number_of_field_periods_to_include
+!!$       print *,"  nfp =",nfp
+!!$       stop
+!!$    end if
     number_of_field_periods_to_include_final = number_of_field_periods_to_include
-    if (number_of_field_periods_to_include <1) then
+    if (number_of_field_periods_to_include <= 0) then
        number_of_field_periods_to_include_final = nfp
-       if (verbose) print *,"  Since number_of_field_periods_to_include was < 1, it is being reset to nfp =",nfp
+       if (verbose) print *,"  Since number_of_field_periods_to_include was <= 0, it is being reset to nfp =",nfp
     end if
 
     zeta = [( zeta_center + (pi*j*number_of_field_periods_to_include_final)/(nfp*nzgrid), j=-nzgrid, nzgrid )]
@@ -975,14 +983,14 @@ contains
     do izeta = -nzgrid,nzgrid
        temp2D(:,izeta) = -sin(zeta(izeta)) / R(:,izeta)
     end do
-    call test_arrays(grad_zeta_X, temp2D, .false., 1.0e-3, 'grad_zeta_X')
+    call test_arrays(grad_zeta_X, temp2D, .false., 1.0e-2, 'grad_zeta_X')
     grad_zeta_X = temp2D ! We might as well use the exact value, which is in temp2D.
 
     ! Sanity check: grad_zeta_Y should be cos(zeta) / R:
     do izeta = -nzgrid,nzgrid
        temp2D(:,izeta) = cos(zeta(izeta)) / R(:,izeta)
     end do
-    call test_arrays(grad_zeta_Y, temp2D, .false., 1.0e-3, 'grad_zeta_Y')
+    call test_arrays(grad_zeta_Y, temp2D, .false., 1.0e-2, 'grad_zeta_Y')
     grad_zeta_Y = temp2D ! We might as well use the exact value, which is in temp2D.
 
     ! grad_zeta_Z should be 0:
@@ -1040,7 +1048,7 @@ contains
          - d_Z_d_s * d_Y_d_theta_vmec * d_X_d_zeta &
          - d_X_d_s * d_Z_d_theta_vmec * d_Y_d_zeta &
          - d_Y_d_s * d_X_d_theta_vmec * d_Z_d_zeta
-    call test_arrays(sqrt_g, temp2D, .false., 1.0e-3, 'sqrt_g')
+    call test_arrays(sqrt_g, temp2D, .false., 3.0e-3, 'sqrt_g')
 
     temp2D = 0 &
          + grad_s_X * grad_theta_vmec_Y * grad_zeta_Z &
@@ -1049,7 +1057,7 @@ contains
          - grad_s_Z * grad_theta_vmec_Y * grad_zeta_X &
          - grad_s_X * grad_theta_vmec_Z * grad_zeta_Y &
          - grad_s_Y * grad_theta_vmec_X * grad_zeta_Z
-    call test_arrays(1/sqrt_g, temp2D, .false., 1.0e-3, '1/sqrt_g')
+    call test_arrays(1/sqrt_g, temp2D, .false., 1.0e-2, '1/sqrt_g')
     
     !*********************************************************************
     ! Sanity tests: Verify that 
@@ -1057,13 +1065,13 @@ contains
     ! matches the corresponding term from VMEC.
     !*********************************************************************
 
-    call test_arrays(B_X * d_X_d_theta_vmec + B_Y * d_Y_d_theta_vmec + B_Z * d_Z_d_theta_vmec, B_sub_theta_vmec, .false., 1.0e-3, 'B_sub_theta_vmec')
-    call test_arrays(B_X * d_X_d_s          + B_Y * d_Y_d_s          + B_Z * d_Z_d_s,          B_sub_s,          .false., 3.0e-3, 'B_sub_s')
-    call test_arrays(B_X * d_X_d_zeta       + B_Y * d_Y_d_zeta       + B_Z * d_Z_d_zeta,       B_sub_zeta,       .false., 1.0e-3, 'B_sub_zeta')
+    call test_arrays(B_X * d_X_d_theta_vmec + B_Y * d_Y_d_theta_vmec + B_Z * d_Z_d_theta_vmec, B_sub_theta_vmec, .false., 1.0e-2, 'B_sub_theta_vmec')
+    call test_arrays(B_X * d_X_d_s          + B_Y * d_Y_d_s          + B_Z * d_Z_d_s,          B_sub_s,          .false., 1.0e-2, 'B_sub_s')
+    call test_arrays(B_X * d_X_d_zeta       + B_Y * d_Y_d_zeta       + B_Z * d_Z_d_zeta,       B_sub_zeta,       .false., 1.0e-2, 'B_sub_zeta')
 
-    call test_arrays(B_X *          grad_s_X + B_Y *          grad_s_Y + B_Z *          grad_s_Z,           temp2D,  .true., 1.0e-3, 'B_sup_s')
-    call test_arrays(B_X *       grad_zeta_X + B_Y *       grad_zeta_Y + B_Z *       grad_zeta_Z,       B_sup_zeta, .false., 1.0e-3, 'B_sup_zeta')
-    call test_arrays(B_X * grad_theta_vmec_X + B_Y * grad_theta_vmec_Y + B_Z * grad_theta_vmec_Z, B_sup_theta_vmec, .false., 3.0e-3, 'B_sup_theta_vmec')
+    call test_arrays(B_X *          grad_s_X + B_Y *          grad_s_Y + B_Z *          grad_s_Z,           temp2D,  .true., 1.0e-2, 'B_sup_s')
+    call test_arrays(B_X *       grad_zeta_X + B_Y *       grad_zeta_Y + B_Z *       grad_zeta_Z,       B_sup_zeta, .false., 1.0e-2, 'B_sup_zeta')
+    call test_arrays(B_X * grad_theta_vmec_X + B_Y * grad_theta_vmec_Y + B_Z * grad_theta_vmec_Z, B_sup_theta_vmec, .false., 1.0e-2, 'B_sup_theta_vmec')
 
     !*********************************************************************
     ! For gbdrift, we need \vect{B} cross grad |B| dot grad alpha.
@@ -1084,7 +1092,7 @@ contains
          - B_Y * grad_s_X * grad_alpha_Z 
 
     call test_arrays(B_cross_grad_s_dot_grad_alpha, B_cross_grad_s_dot_grad_alpha_alternate, &
-         .false., 1.0e-3, 'B_cross_grad_s_dot_grad_alpha')
+         .false., 1.0e-2, 'B_cross_grad_s_dot_grad_alpha')
 
     do izeta = -nzgrid,nzgrid
        B_cross_grad_B_dot_grad_alpha(:,izeta) = 0 &
@@ -1105,7 +1113,7 @@ contains
          - B_Y * grad_B_X * grad_alpha_Z 
 
     call test_arrays(B_cross_grad_B_dot_grad_alpha, B_cross_grad_B_dot_grad_alpha_alternate, &
-         .false., 1.0e-3, 'B_cross_grad_B_dot_grad_alpha')
+         .false., 1.0e-2, 'B_cross_grad_B_dot_grad_alpha')
 
     !*********************************************************************
     ! Finally, assemble the quantities needed for gs2.
@@ -1129,7 +1137,7 @@ contains
     gbdrift = 2 * B_reference * L_reference * L_reference * sqrt_s * B_cross_grad_B_dot_grad_alpha &
          / (B * B * B)
 
-    gbdrift0 = (B_sub_theta_vmec * d_B_d_zeta - B_sub_zeta * d_B_d_theta_vmec) * sqrt_g * edge_toroidal_flux_over_2pi &
+    gbdrift0 = (B_sub_theta_vmec * d_B_d_zeta - B_sub_zeta * d_B_d_theta_vmec) / sqrt_g * edge_toroidal_flux_over_2pi &
          * 2 * shat / (B * B * B * sqrt_s)
     ! In the above 2-line expression for gbdrift0, the first line is \vec{B} \times \nabla B \cdot \nabla \psi.
 

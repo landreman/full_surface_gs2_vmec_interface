@@ -262,7 +262,7 @@ and
 + \left( -\iota + \frac{\partial\Lambda}{\partial\zeta}\right) \nabla\zeta.
 \label{eq:grad_alpha}
 \end{align}
-\todo{Do we want to include a shift to zeta so the secular $\zeta$ term in $\nabla\alpha$ vanishes at particular a particular place?}
+\todo{Do we want to subtract {\ttfamily zeta\_center} from $\zeta$ here so the secular $\zeta$ term in $\nabla\alpha$ vanishes at the center of the domain? Or might we want it to vanish somehwhere other than the center of the domain?}
 Now that Cartesian components of $\nabla\psi$ and $\nabla \alpha$ are known, $\gdstwo$, $\gdstwoone$, and $\gdstwotwo$ can be computed. 
 
 To evaluate $\gbdriftO = \cvdriftO$, we can use
@@ -272,7 +272,7 @@ To evaluate $\gbdriftO = \cvdriftO$, we can use
 \vect{B}\times\nabla \zeta \cdot \nabla \psi \frac{\partial B}{\partial \zeta} + \vect{B}\times\nabla \theta_v \cdot \nabla \psi \frac{\partial B}{\partial \theta_v} \nonumber \\
 &=  \left(
 B_\theta \nabla\theta_v \times\nabla\zeta\cdot\nabla s \frac{\partial B}{\partial\zeta} + B_\zeta \nabla\zeta\times\nabla\theta_v\cdot\nabla s \frac{\partial B}{\partial\theta_v} \right) \frac{d\psi}{ds} \nonumber \\
-&= \left( B_\theta \frac{\partial B}{\partial\zeta} - B_\zeta \frac{\partial B}{\partial\theta_v} \right) \sqrt{g} \psi_{LCFS} .
+&= \left( B_\theta \frac{\partial B}{\partial\zeta} - B_\zeta \frac{\partial B}{\partial\theta_v} \right) \frac{\psi_{LCFS} }{\sqrt{g} }.
 \end{align}
 To obtain this result we have used
 \begin{equation}
@@ -497,6 +497,9 @@ In this last equation, we were free to put primes on $k_\psi$ because it is summ
 Using (\ref{eq:Taylor_iota}), it can be seen that (\ref{eq:v_B_term_minus}) is identical to  (\ref{eq:v_B_term_plus}),
 so the magnetic drift term is indeed continuous across the boundary.
 
+\todo{Also show continuity for $\langle \phi \rangle_R$...}
+
+\begin{comment}
 
 perpendicular wavenumber appearing inside the Bessel functions:
 \begin{equation}
@@ -509,5 +512,6 @@ Using
 \end{equation}
 we find that (\ref{eq:kperp2}) 
 
+\end{comment}
 
 \end{document} 

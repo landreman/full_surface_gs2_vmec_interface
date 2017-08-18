@@ -9,11 +9,12 @@ program test_vmec_to_gs2_geometry_interface
   !*********************************************************************
 
   character(len=2000) :: vmec_filename = 'equilibria/wout_w7x_standardConfig.nc'
-  integer, parameter :: nalpha = 25
-  integer, parameter :: nzgrid = 50
+!  character(len=2000) :: vmec_filename = 'equilibria/wout_161s1.nc'
+  integer, parameter :: nalpha = 5
+  integer, parameter :: nzgrid = 7
   real :: zeta_center = 0.0
-  integer :: number_of_field_periods_to_include = 1
-  real :: desired_normalized_toroidal_flux = 0.5d+0
+  real :: number_of_field_periods_to_include = 1
+  real :: desired_normalized_toroidal_flux = 0.6354167d+0
   integer :: vmec_surface_option = 0
   logical :: verbose = .true.
 
