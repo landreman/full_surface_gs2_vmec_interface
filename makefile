@@ -1,9 +1,5 @@
-# makefile for NERSC Edison and Cori
-# You must first load the cray-netcdf module and python module:
-#   module load cray-netcdf python
-# It is convenient to run
-#   module unload cray-libsci
-# to avoid warning messages about libsci during compiling.
+# For NERSC Edison and Cori, you must first load the cray-netcdf module:
+#   module load cray-netcdf
 
 
 ifdef NERSC_HOST
@@ -14,23 +10,20 @@ endif
 
 ifeq ($(HOSTNAME),edison)
 	FC = ftn
-	## NERSC documentation recommends against specifying -O3
-	## -mkl MUST APPEAR AT THE END!!
-	EXTRA_COMPILE_FLAGS = -openmp -mkl
-	EXTRA_LINK_FLAGS =  -openmp -mkl -Wl,-ydgemm_
-	# Above, the link flag "-Wl,-ydgemm_" causes the linker to report which version of DGEMM (the BLAS3 matrix-matrix-multiplication subroutine) is used.
-
+	# In the next line, we prmote real to double, as gs2 does, using -r8
+	EXTRA_COMPILE_FLAGS = -r8
+	EXTRA_LINK_FLAGS =
 else ifeq ($(HOSTNAME),cori)
 	FC = ftn
-	## NERSC documentation recommends against specifying -O3
-	## -mkl MUST APPEAR AT THE END!!
-	EXTRA_COMPILE_FLAGS = -qopenmp -mkl
-	EXTRA_LINK_FLAGS =  -qopenmp -mkl -Wl,-ydgemm_
-	# Above, the link flag "-Wl,-ydgemm_" causes the linker to report which version of DGEMM (the BLAS3 matrix-matrix-multiplication subroutine) is used.
+	# In the next line, we prmote real to double, as gs2 does, using -r8
+	EXTRA_COMPILE_FLAGS = -r8
+	EXTRA_LINK_FLAGS =
 else
+	# Options for my macbook laptop with macports
 	FC = mpif90
-	EXTRA_COMPILE_FLAGS = -fopenmp -I/opt/local/include -ffree-line-length-none
-	EXTRA_LINK_FLAGS =  -fopenmp -L/opt/local/lib -lnetcdff  -lnetcdf
+	# In the next line, we prmote real to double, as gs2 does, using -fdefault-real-8 -fdefault-double-8
+	EXTRA_COMPILE_FLAGS = -I/opt/local/include -ffree-line-length-none -fdefault-real-8 -fdefault-double-8
+	EXTRA_LINK_FLAGS =  -L/opt/local/lib -lnetcdff  -lnetcdf
 endif
 
 
@@ -40,15 +33,12 @@ endif
 LIBSTELL_DIR = mini_libstell
 #LIBSTELL_DIR=/Users/mattland/stellopt/LIBSTELL/Release
 
-# The variable LIBSTELL_FOR_SFINCS should either be "mini_libstell/mini_libstell.a", if you use this reduced version of libstell
+# The variable LIBSTELL_FOR_GS2 should either be "mini_libstell/mini_libstell.a", if you use this reduced version of libstell
 # that comes packaged with this repository, or else it should point to a libstell.a library elsewhere on your system.
 LIBSTELL_FOR_GS2 = mini_libstell/mini_libstell.a
 #LIBSTELL_FOR_GS2=/Users/mattland/stellopt/LIBSTELL/Release/libstell.a
 
 # End of system-dependent variable assignments
-
-# Promote real to double, as gs2 does:
-EXTRA_COMPILE_FLAGS += -fdefault-real-8 -fdefault-double-8
 
 export
 
