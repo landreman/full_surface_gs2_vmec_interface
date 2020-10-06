@@ -999,9 +999,9 @@ contains
 
     ! Form grad alpha = grad (theta_vmec + Lambda - iota * zeta)
     do izeta = -nzgrid,nzgrid
-       grad_alpha_X(:,izeta) = (d_Lambda_d_s(:,izeta) - zeta(izeta) * d_iota_d_s) * grad_s_X(:,izeta)
-       grad_alpha_Y(:,izeta) = (d_Lambda_d_s(:,izeta) - zeta(izeta) * d_iota_d_s) * grad_s_Y(:,izeta)
-       grad_alpha_Z(:,izeta) = (d_Lambda_d_s(:,izeta) - zeta(izeta) * d_iota_d_s) * grad_s_Z(:,izeta)
+       grad_alpha_X(:,izeta) = (d_Lambda_d_s(:,izeta) - (zeta(izeta) - zeta_center) * d_iota_d_s) * grad_s_X(:,izeta)
+       grad_alpha_Y(:,izeta) = (d_Lambda_d_s(:,izeta) - (zeta(izeta) - zeta_center) * d_iota_d_s) * grad_s_Y(:,izeta)
+       grad_alpha_Z(:,izeta) = (d_Lambda_d_s(:,izeta) - (zeta(izeta) - zeta_center) * d_iota_d_s) * grad_s_Z(:,izeta)
     end do
     grad_alpha_X = grad_alpha_X + (1 + d_Lambda_d_theta_vmec) * grad_theta_vmec_X + (-iota + d_Lambda_d_zeta) * grad_zeta_X
     grad_alpha_Y = grad_alpha_Y + (1 + d_Lambda_d_theta_vmec) * grad_theta_vmec_Y + (-iota + d_Lambda_d_zeta) * grad_zeta_Y
@@ -1089,9 +1089,9 @@ contains
     do izeta = -nzgrid,nzgrid
        B_cross_grad_B_dot_grad_alpha(:,izeta) = 0 &
             + (B_sub_s(:,izeta) * d_B_d_theta_vmec(:,izeta) * (d_Lambda_d_zeta(:,izeta) - iota) &
-            + B_sub_theta_vmec(:,izeta) * d_B_d_zeta(:,izeta) * (d_Lambda_d_s(:,izeta) - zeta(izeta) * d_iota_d_s) &
+            + B_sub_theta_vmec(:,izeta) * d_B_d_zeta(:,izeta) * (d_Lambda_d_s(:,izeta) - (zeta(izeta) - zeta_center) * d_iota_d_s) &
             + B_sub_zeta(:,izeta) * d_B_d_s(:,izeta) * (1 + d_Lambda_d_theta_vmec(:,izeta)) &
-            - B_sub_zeta(:,izeta) * d_B_d_theta_vmec(:,izeta) * (d_Lambda_d_s(:,izeta) - zeta(izeta) * d_iota_d_s) &
+            - B_sub_zeta(:,izeta) * d_B_d_theta_vmec(:,izeta) * (d_Lambda_d_s(:,izeta) - (zeta(izeta) - zeta_center) * d_iota_d_s) &
             - B_sub_theta_vmec(:,izeta) * d_B_d_s(:,izeta) * (d_Lambda_d_zeta(:,izeta) - iota) &
             - B_sub_s(:,izeta) * d_B_d_zeta(:,izeta) * (1 + d_Lambda_d_theta_vmec(:,izeta))) / sqrt_g(:,izeta)
     end do
