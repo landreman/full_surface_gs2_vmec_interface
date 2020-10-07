@@ -211,8 +211,8 @@ contains
     edge_toroidal_flux_over_2pi = phi(ns) / (2*pi) * isigng ! isigns is called signgs in the wout*.nc file.
     ! This isigng factor is related to items 4, 5, & 7 in https://terpconnect.umd.edu/~mattland/assets/notes/vmec_signs.pdf.
     ! "phi" in VMEC is positive iff B points in the direction of increasing toroidal angle.
-    ! This means the sign of psi_t in B = grad psi_t cross grad theta + iota grad zeta cross grad psi
-    ! differs by a factor of sign(sqrt(g)).
+    ! This means the sign of psi_t in B = grad psi_t cross grad theta + iota grad zeta cross grad psi_t
+    ! differs from VMEC's psi by a factor of sign(sqrt(g)).
 
     ! Set reference length and magnetic field for GS2's normalization, 
     ! using the choices made by Pavlos Xanthopoulos in GIST:
