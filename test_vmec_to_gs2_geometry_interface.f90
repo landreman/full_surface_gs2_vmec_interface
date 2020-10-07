@@ -8,17 +8,17 @@ program test_vmec_to_gs2_geometry_interface
   ! Input parameters
   !*********************************************************************
 
-  character(len=2000) :: vmec_filename = 'equilibria/wout_w7x_standardConfig.nc'
+!  character(len=2000) :: vmec_filename = 'equilibria/wout_w7x_standardConfig.nc'
 !  character(len=2000) :: vmec_filename = 'wout_tj20.nc'
 !  character(len=2000) :: vmec_filename = '/Users/mattland/Box Sync/work19/20190117-01-boozXformOn2SurfacesForDatabaseOfEquilibria_2ndPass/wout_estell_24_scaled.nc'
-!  character(len=2000) :: vmec_filename = 'equilibria/wout_161s1.nc'
-  integer, parameter :: nalpha = 3
-  integer, parameter :: nzgrid = 7
+  character(len=2000) :: vmec_filename = 'equilibria/wout_161s1.nc'
+  integer, parameter :: nalpha = 1
+  integer, parameter :: nzgrid = 100
   real :: zeta_center = 0
-  real :: number_of_field_periods_to_include = 1
-  real :: desired_normalized_toroidal_flux = 0.1d+0
+  real :: number_of_field_periods_to_include = 5
+  real :: desired_normalized_toroidal_flux = 0.6354167
   integer :: vmec_surface_option = 0
-  logical :: verbose = .true.
+  logical :: verbose = .false.
 
   !*********************************************************************
   ! Output arrays

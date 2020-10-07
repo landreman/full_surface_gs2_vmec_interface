@@ -103,7 +103,7 @@ contains
     integer :: j, index, izeta, ialpha, which_surface, isurf, m, n, imn, imn_nyq
     real :: angle, sin_angle, cos_angle, temp, edge_toroidal_flux_over_2pi
     real, dimension(:,:), allocatable :: theta_vmec
-    integer :: ierr, iopen, fzero_flag
+    integer :: ierr, iopen, fzero_flag, toroidal_flux_sign
     real :: number_of_field_periods_to_include_final
     real :: dphi, iota, min_dr2, ds, d_pressure_d_s, d_iota_d_s, scale_factor
     real :: theta_vmec_min, theta_vmec_max, sqrt_s
@@ -206,7 +206,13 @@ contains
        end if
     end if
 
-    edge_toroidal_flux_over_2pi = phi(ns) / (2*pi) * isigng ! isigns is called signgs in the wout*.nc file. Why is this signgs here?
+    toroidal_flux_sign = int(phi(ns) / abs(phi(ns)))
+    if (verbose) print *,"  Sign of toroidal flux: ", toroidal_flux_sign
+    edge_toroidal_flux_over_2pi = phi(ns) / (2*pi) * isigng ! isigns is called signgs in the wout*.nc file.
+    ! This isigng factor is related to items 4, 5, & 7 in https://terpconnect.umd.edu/~mattland/assets/notes/vmec_signs.pdf.
+    ! "phi" in VMEC is positive iff B points in the direction of increasing toroidal angle.
+    ! This means the sign of psi_t in B = grad psi_t cross grad theta + iota grad zeta cross grad psi
+    ! differs by a factor of sign(sqrt(g)).
 
     ! Set reference length and magnetic field for GS2's normalization, 
     ! using the choices made by Pavlos Xanthopoulos in GIST:
@@ -1126,15 +1132,25 @@ contains
     gds22 = (grad_psi_X * grad_psi_X + grad_psi_Y * grad_psi_Y + grad_psi_Z * grad_psi_Z) &
          * shat * shat / (L_reference * L_reference * B_reference * B_reference * normalized_toroidal_flux_used)
 
+!!$    gbdrift = 2 * B_reference * L_reference * L_reference * sqrt_s * B_cross_grad_B_dot_grad_alpha &
+!!$         / (B * B * B)
+!!$
+!!$    gbdrift0 = (B_sub_theta_vmec * d_B_d_zeta - B_sub_zeta * d_B_d_theta_vmec) / sqrt_g * edge_toroidal_flux_over_2pi &
+!!$         * 2 * shat / (B * B * B * sqrt_s)
+!!$    ! In the above 2-line expression for gbdrift0, the first line is \vec{B} \times \nabla B \cdot \nabla \psi.
+!!$
+!!$    cvdrift = gbdrift + 2 * B_reference * L_reference * L_reference * sqrt_s * mu_0 * d_pressure_d_s &
+!!$         * B_cross_grad_s_dot_grad_alpha / (B * B * B * B)
+
     gbdrift = 2 * B_reference * L_reference * L_reference * sqrt_s * B_cross_grad_B_dot_grad_alpha &
-         / (B * B * B)
+         / (B * B * B) * toroidal_flux_sign
 
     gbdrift0 = (B_sub_theta_vmec * d_B_d_zeta - B_sub_zeta * d_B_d_theta_vmec) / sqrt_g * edge_toroidal_flux_over_2pi &
-         * 2 * shat / (B * B * B * sqrt_s)
+         * 2 * shat / (B * B * B * sqrt_s) * toroidal_flux_sign
     ! In the above 2-line expression for gbdrift0, the first line is \vec{B} \times \nabla B \cdot \nabla \psi.
 
     cvdrift = gbdrift + 2 * B_reference * L_reference * L_reference * sqrt_s * mu_0 * d_pressure_d_s &
-         * B_cross_grad_s_dot_grad_alpha / (B * B * B * B)
+         * toroidal_flux_sign / (edge_toroidal_flux_over_2pi * B * B)
 
     cvdrift0 = gbdrift0
 

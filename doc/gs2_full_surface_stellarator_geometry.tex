@@ -31,6 +31,7 @@
 \newcommand{\gradpar}{\mathtt{gradpar}}
 \newcommand{\delthet}{\mathtt{delthet}}
 \newcommand{\codedt}{\mathtt{code\_dt}}
+\newcommand{\sign}{\mathrm{sign}}
 
 
 \title{Definitions for GS2 full-flux-surface stellarator geometry}
@@ -115,14 +116,16 @@ In GIST, the parallel coordinate $z$ is presently taken to be the Boozer poloida
 
 In GIST, the reference length $L_{ref}$ is taken to be the effective minor radius computed by VMEC, named Aminor\_p in
 the VMEC wout*.nc file.
+Note that $L_{ref}$ is always positive.
 The reference magnetic field is taken to be
 \begin{equation}
-B_{ref} = \frac{2 \psi_{LCFS}}{L_{ref}^2}
+B_{ref} = \frac{2 |\psi_{LCFS}|}{L_{ref}^2}
+%B_{ref} = \frac{2 \psi_{LCFS}}{L_{ref}^2}
 \label{eq:Bref}
 \end{equation}
 where $\psi_{LCFS}$ is the value of $\psi$ at the outermost VMEC flux surface. The choice (\ref{eq:Bref}) is
 motivated by the cylindrical limit: the toroidal flux enclosed by the outermost VMEC surface is equivalent to the flux of a field $B_{ref}$ through a circle of radius $L_{ref}$.
-
+Note that $B_{ref}$ is always positive.
 
 
 The radial coordinate $x$ is then chosen to be
@@ -130,22 +133,29 @@ The radial coordinate $x$ is then chosen to be
 x = L_{ref} \sqrt{\frac{\psi}{\psi_{LCFS}}} = L_{ref} \sqrt{s},
 \label{eq:gist_x}
 \end{equation}
-where $s = \sqrt{\psi / \psi_{LCFS}} \in [0,1]$ is the flux surface label coordinate
+where $s =\psi / \psi_{LCFS} \in [0,1]$ is the flux surface label coordinate
 used in VMEC. 
+Here and everywhere a $\sqrt{\ldots}$ appears, we take the positive root to be chosen.
 The choice (\ref{eq:gist_x}) is natural since 
 $x$ then reduces to the usual minor radius in the cylindrical limit.
 %the toroidal flux $2\pi\psi$ scales like the square of the radius in the cylindrical limit.
-It follows that
+Like $L_{ref}$, $B_{ref}$, and $s$, $x$ is positive, and to properly keep track of signs it is useful to write $\psi = \psi_{LCFS} (x/L_{ref})^2$. Differentiating, 
+it follows that
 \begin{equation}
-\frac{dx}{d\psi} = \frac{L_{ref}}{2 \sqrt{ \psi \psi_{LCFS}}}
-= \frac{1}{L_{ref} B_{ref}} \sqrt{ \frac{\psi_{LCFS}}{\psi}}.
+\frac{dx}{d\psi} = 
+%\frac{L_{ref}}{2 \sqrt{ \psi \psi_{LCFS}}}
+%= \frac{1}{L_{ref} B_{ref}} \sqrt{ \frac{\psi_{LCFS}}{\psi}}.
+\frac{L_{ref}^2}{2 x \psi_{LCFS}} = \frac{L_{ref}}{2 \psi_{LCFS} \sqrt{s}} .
 \label{eq:psi_x_conversion}
 \end{equation}
 
 Another choice made in GIST is $\kxfac=1$. According to (\ref{eq:kxfac}), we are then required to take 
 \begin{equation}
-\frac{d y}{d\alpha} = L_{ref} \sqrt{\frac{\psi}{\psi_{LCFS}}} .
+\frac{d y}{d\alpha} = \sigma L_{ref} \sqrt{s} ,
 \label{eq:dy_dalpha}
+\end{equation}
+where \begin{equation}
+\sigma = \sign(\psi) = \sign(\psi_{LCFS}).
 \end{equation}
 
 GIST computes the global shear parameter $\hat{s}$ using
@@ -161,10 +171,10 @@ can be evaluated to obtain explicit expressions for the geometry arrays computed
 \gdstwo &=& |\nabla y|^2 = |\nabla\alpha|^2 L_{ref}^2 \frac{\psi}{\psi_{LCFS}}, \\
 \gdstwoone &=& \hat{s} \nabla x \cdot \nabla y = \frac{\hat{s}}{B_{ref}} \nabla\psi\cdot\nabla\alpha , \\
 \gdstwotwo &=& \hat{s}^2|\nabla x |^2  = \left( \frac{\hat{s}}{L_{ref} B_{ref}}\right)^2 \frac{\psi_{LCFS}}{\psi} |\nabla\psi |^2, \\
-\gbdrift &=& \frac{2 B_{ref} L_{ref}^2}{B^3} \sqrt{\frac{\psi}{\psi_{LCFS}}} \vect{B}\times\nabla B\cdot \nabla \alpha, \\
-\gbdriftO &=& \hat{s} \frac{2 }{B^3}   \sqrt{\frac{\psi_{LCFS}}{\psi}} \vect{B}\times\nabla B\cdot \nabla \psi, \\
-\cvdrift &=& \frac{2 B_{ref} L_{ref}^2}{B^2} \sqrt{\frac{\psi}{\psi_{LCFS}}} \vect{B}\times\vect{\kappa} \cdot \nabla \alpha, \\
-\cvdriftO &=& \hat{s} \frac{2 }{B^2}  \sqrt{\frac{\psi_{LCFS}}{\psi}} \vect{B}\times\vect{\kappa} \cdot \nabla \psi,  \label{eq:gist_cvdrift0} \\
+\gbdrift &=& \frac{2 \sigma B_{ref} L_{ref}^2}{B^3} \sqrt{\frac{\psi}{\psi_{LCFS}}} \vect{B}\times\nabla B\cdot \nabla \alpha, \\
+\gbdriftO &=& \hat{s} \frac{2 \sigma}{B^3}   \sqrt{\frac{\psi_{LCFS}}{\psi}} \vect{B}\times\nabla B\cdot \nabla \psi, \\
+\cvdrift &=& \frac{2 \sigma B_{ref} L_{ref}^2}{B^2} \sqrt{\frac{\psi}{\psi_{LCFS}}} \vect{B}\times\vect{\kappa} \cdot \nabla \alpha, \\
+\cvdriftO &=& \hat{s} \frac{2 \sigma}{B^2}  \sqrt{\frac{\psi_{LCFS}}{\psi}} \vect{B}\times\vect{\kappa} \cdot \nabla \psi,  \label{eq:gist_cvdrift0} \\
 \fprim &=&   \frac{L_{ref}}{n_s} \frac{d n_s}{d x}, \\
 \tprim &=&   \frac{L_{ref}}{T_s} \frac{d T_s}{d x}. 
 \end{eqnarray}
@@ -188,7 +198,7 @@ Thus, the field line label we need for GS2 geometry quantities is
 \end{equation}
 
 VMEC provides many quantities as functions of the coordinates $(s, \theta_v, \zeta)$,
-where again $s = \sqrt{\psi / \psi_{LCFS}}$.
+where again $s = \psi / \psi_{LCFS}$.
 Specifically, it provides the Fourier amplitudes for expansions in $\theta_v$ and $\zeta$,
 on grid points equally spaced in $s$.
 The quantities that are available include
@@ -325,18 +335,18 @@ The last quantity we need to evaluate is $\cvdrift$. Using
 (where we have used the MHD equilibrium equation $\vect{j}\times\vect{B} = \nabla p$), we find
 \begin{equation}
 \cvdrift = \gbdrift 
-+ \frac{2 B_{ref} L_{ref}^2}{B^2} \sqrt{\frac{\psi}{\psi_{LCFS}}} \frac{\mu_0}{B^2} \frac{dp}{ds} \vect{B}\times\nabla s \cdot \nabla \alpha.
+%+ \frac{2 B_{ref} L_{ref}^2}{B^2} \sqrt{\frac{\psi}{\psi_{LCFS}}} \frac{\mu_0}{B^2} \frac{dp}{ds} \vect{B}\times\nabla s \cdot \nabla \alpha.
++ \frac{\mu_0 2 B_{ref} L_{ref}^2 \sigma \sqrt{s}}{\psi_{LCFS} B^2} \frac{dp}{ds}.
 \end{equation}
-In the last term, $\vect{B}\times\nabla s \cdot \nabla \alpha$ can either
-be evaluated using the Cartesian components of $\vect{B}$, $\nabla s$, and $\nabla \alpha$,
-the calculation of which has already been described,
-or by combining (\ref{eq:grad_alpha}) and (\ref{eq:Bsub}) to obtain
-\begin{equation}
-\vect{B}\times\nabla s \cdot \nabla \alpha
-= \frac{1}{\sqrt{g}} \left[
-B_\zeta \left( 1  + \frac{\partial\Lambda}{\partial\theta_v}\right)
--B_\theta \left( \frac{\partial\Lambda}{\partial\zeta} - \iota \right) \right].
-\end{equation}
+To get the last term, we have used $\vect{B}\times\nabla \psi \cdot \nabla \alpha = B^2$. %can either be evaluated using the Cartesian components of $\vect{B}$, $\nabla s$, and $\nabla \alpha$,
+%the calculation of which has already been described,
+%or by combining (\ref{eq:grad_alpha}) and (\ref{eq:Bsub}) to obtain
+%\begin{equation}
+%\vect{B}\times\nabla s \cdot \nabla \alpha
+%= \frac{1}{\sqrt{g}} \left[
+%B_\zeta \left( 1  + \frac{\partial\Lambda}{\partial\theta_v}\right)
+%-B_\theta \left( \frac{\partial\Lambda}{\partial\zeta} - \iota \right) \right].
+%\end{equation}
 
 
 
